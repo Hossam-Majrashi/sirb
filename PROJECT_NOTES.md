@@ -1,0 +1,57 @@
+# Sirb (com.h.sirb)
+
+Sirb is a desktop-only Chromium browser for video and large tab collections. Flutter owns the chrome; a local fork of webview_cef 0.6.2 owns real CEF Texture instances on Linux, Windows and macOS. SQLite stores sessions and histories in application support; shared_preferences stores onboarding and presentation preferences.
+
+## Skills learned
+
+- Flutter gen-l10n: ARB resources generate typed localization, Material delegates provide RTL; applied to root l10n/ and core/l10n. Read https://docs.flutter.dev/ui/accessibility-and-internationalization/internationalization.
+- Responsive layout: local LayoutBuilder constraints, Expanded and constrained content avoid window-dependent assumptions; desktop workspace and settings. Read https://docs.flutter.dev/ui/adaptive-responsive/general.
+- window_manager 0.5.2: initialize before window calls, minimum size and prevent-close listener; desktop lifecycle. Read package README/API and changelog.
+- shared_preferences 2.5.6 and url_launcher 6.3.3: preferences are not crash-safe session storage, launching can return false or throw; settings and contacts handle both. Read both package READMEs/changelogs.
+- icons_launcher exactly 3.1.0: platforms enable flags and dart run icons_launcher:create; assets/icon and desktop runners. Read README/changelog.
+- Linux packaging: FPM directory inputs and architecture/dependency metadata, AppDir/AppRun, Flatpak SDK/runtime and build-bundle; packaging scripts. Read FPM cli-reference, docs.appimage.org manual, flatpak-docs first-build.rst.
+- CEF embedding: off-screen Texture, separate browser hosts, switches before CefInitialize and WasHidden; fork common native code. Read webview_cef README/changelog/source and chromiumembedded.github.io/cef/general_usage.
+- Blocking: OnBeforeResourceLoad runs on IO thread and RV_CANCEL prevents transmission; synchronized compiled rules and document-start V8 injection, CSS selectors scoped to hosts, defensive DOM observation for YouTube. Read CEF resource_request_handler.h and Adblock Plus filter writing guide.
+- Resources: affinity applies to threads and is inherited across fork; use allowed CPU mask, Windows Job limits account descendants, systemd-run --user --scope -p MemoryMax= requires memory delegation; Mesa DRI_PRIME and NVIDIA PRIME env precede rendering. Read man-pages sched_setaffinity.2, kernel cgroup-v2, systemd-run, Microsoft Job Objects/SetProcessAffinityMask, Mesa envvars and NVIDIA PRIME Render Offload chapter.
+- Tabs: hidden hosts retain state, closed hosts restore URLs and media time; bounded speculative hosts consume real resources and cannot evade quotas. Read CEF browser.h (WasHidden) and MDN preconnect; applied to tab and preloader services.
+- SQLite: sqflite_common_ffi 2.4.3 runs operations on a worker isolate, use WAL and transactions with synchronous FULL for crash durability. Read package README/changelog; shared storage service.
+- Codecs/sandbox: official CEF distributions must not be assumed to include licensed H.264/AAC; VP9/AV1/Opus tested separately. User namespaces are required for unprivileged AppImage; Zypak CEF requires ZYPAK_CEF_LIBRARY_PATH. Read CEF build documentation, browser API and Zypak README; build notes and runtime tests.
+- Native interop: typed pointers/Struct and DynamicLibrary via dart:ffi, method channel marshaling, Flutter Texture registration; native fork and per-platform resource implementations. Read dart.dev/interop/c-interop and Flutter platform-channels.
+- Desktop toolchains: CEF 149 requires C++20, Windows MSVC/CMake, Linux clang/ninja/GTK, macOS >=12 with Xcode/CocoaPods and helper embed hook; runners/build scripts. Read Flutter Linux/Windows/macOS building pages and webview_cef installation documentation.
+- Isolates: ports transfer messages not shared mutable memory, FFI database factory already owns worker isolate; serialized snapshot writes. Read dart.dev/language/isolates and sqflite_common_ffi docs.
+- Keyboard/reorder: SingleActivator handles platform modifiers; CallbackShortcuts and ReorderableListView implement browser accelerators and tab ordering. Read Flutter actions-and-shortcuts.
+- Package verification: pub.dev API latest stable archive, SDK constraints and changelogs read before dependencies. Verified Flutter 3.47.7/Dart 3.13.5 supports the chosen versions. webview_cef lists all three targets; upstream Windows x64-only downloader will be extended for Arm64.
+
+## Structure and binding development rules
+
+core contains theme, l10n and constants; shared contains reusable models, persistence and engine contracts; features contain browser/tabs, ads, onboarding, histories and settings; platform contains concrete OS resource implementations; screens/desktop is the only targeted screen directory. Every new feature/change must be applied to all existing targeted screen directories (desktop only). Never end a session without checking this. No fixed interface text or colors in widgets; website titles, URLs, downloaded filenames and detected hardware are external data, not interface labels.
+
+## Assumptions and decisions
+
+Only desktop targets are generated. The specification's references to mobile/web adaptations apply only if targeted. /dist means the repository-root dist/ directory, not a privileged filesystem root. Shared browser instances share one persistent profile to preserve login. Media-playing tabs are exempt from tab-sleep and drawing suppression even when RAM is tight; the UI warns rather than interrupt playback. Pinned tabs remain eligible for sleep unless playing media. Speculation never crosses non-http(s) URLs and is bounded by RAM and live-instance budgets.
+
+Search is DuckDuckGo-only in both the address bar and new-tab page; legacy search-engine preferences are ignored. Two-finger scrolling follows OS settings without an app override and refreshes when the window regains focus. New tabs are inserted immediately after their opener (or the active tab for toolbar/history opens); batches keep input order there. During live resizing, Flutter fills the new viewport with the last CEF frame until the resized frame arrives. This avoids empty strips at the cost of transient scaling; actual texture dimensions still come from native paint events. The browser surface has no 3840-pixel display-width cap. Live resize requests are serialized and pending intermediate sizes coalesced in the shared Dart controller; sizes are cached only after native acknowledgement, and failures remain retryable.
+
+Game mode suspends speculative video preloads without changing CPU/RAM quotas or protection of playing tabs; turning it off restores the saved preload choice. With hardware acceleration and Automatic GPU selection, game mode prefers the discrete adapter on supported Linux/Windows dual-GPU systems at launch, without rewriting the saved GPU preference. Explicit integrated/discrete choices remain respected; macOS stays OS-managed. GPU policy changes require restart, never live migration or an FPS guarantee. NVIDIA PRIME on a hybrid Wayland desktop uses CEF X11/XWayland when DISPLAY is available to avoid fatal cross-adapter dmabuf imports; an explicit Ozone backend is preserved, and Wayland-only hosts are not forced to use unavailable X11. Early GPU/scope relaunch preserves startup URLs and drops stale wait-parent arguments. Graphics compatibility is opt-in and requires restart: SIRB_WEBGPU_ENABLED=0 disables Chromium WebGPUService while retaining hardware WebGL and GPU compositing, allowing compatible sites to choose their fallback. It is not a universal game fix (CEF OSR pointer lock remains unsupported; the explicit native game-window handoff below uses a different, real windowed host). Respect Chromium driver blocklists; do not force unsafe GPU features or advertise dual-GPU pooling/100% utilization. GPU badges describe saved preferences, not measured live adapter selection. Audio diagnostics observe existing WebAudio contexts weakly and never force resume/sample-rate/latency changes.
+
+Native games use an explicit, localized menu/confirmation action that creates a Chrome-style CEF Views window inside Sirb; no pointer-lock state is spoofed and normal Chromium permission handling remains intact. Only HTTP(S) is accepted, at most one native game window (including pending creation) is allowed, and it shares the persistent request context and ad/configuration scheme. Successful handoff saves the source visit, clears speculation and disposes the original OSR host before resetting that tab to sirb:new, avoiding two loaded game heaps. A creation failure retains the original tab. Native windows count against live-host accounting, are not slept like ordinary tabs, and are not session-restored. Close the Views owner during app shutdown; never call CefShutdown with live browsers or bypass the existing close-timeout safeguard.
+
+Diagnostics observe uncaught JS/rejections, console warnings/errors, resource/HTTP failures, permission rejection, media/API failures, worker events and WebGL/WebGPU loss. Observers preserve successful results and rethrow rejected operations, never grant permissions or force playback. Serialized SQLite writes and stable pagination preserve older records; copy/export retrieves all matching rows, not only the first displayed 1,000. Payload fields are bounded, and log UI warns about privacy and visibility limits: site-hidden/caught custom errors and some worker failures can remain invisible. An empty log is not proof of an error-free page. Website console telemetry in native windows is restricted to runtimeError/adError; it must not forge lifecycle or popup commands. CDP remains opt-in and loopback-only for isolated testing, never enabled in normal preview launches.
+
+## Feature × platform
+
+| Feature | Linux | Windows | macOS |
+|---|---|---|---|
+| CEF Texture / profile / requests / tabs / history | Native CEF | Native CEF | Native CEF + helpers |
+| Native game-window / enhanced error capture | Shared CEF Views/Dart, Linux x64 runtime verified | Same implementation; host verification pending | Same implementation; host verification pending |
+| CPU ceiling | sched_setaffinity, inherited and all extant threads | affinity + Job Object | Disabled: OS exposes no CPU affinity API |
+| Hard RAM | systemd user cgroup v2 when available; disabled otherwise | Job Object | Disabled: no safe process-tree hard ceiling |
+| Soft RAM / LRU sleep | Enabled | Enabled | Enabled |
+| GPU preference | PRIME environment when adapters present | UserGpuPreferences registry | Disabled: managed by OS |
+| Acceleration | Chromium switches | Chromium switches + software fallback | Chromium switches + software fallback |
+| Flatpak hard RAM / GPU preference | Hard RAM disabled without host delegation; GPU env driver-dependent | Not a target | Not a target |
+| H.264/AAC | Official binaries not assumed licensed | Same | Same |
+
+## Ad-rule maintenance
+
+Edit only lib/features/ads/ad_rules.dart: add domains as bare host names, URL patterns as regular expressions, site selectors as valid CSS, and defensive scripts in youtubeScripts. Never block all googlevideo.com: this breaks the desired content. Runtime sends the constants to native request interception; no duplicate rule lists exist in C++. YouTube can change server-side insertion and anti-adblock behavior; no universal or permanent ad-free guarantee is made. Retest with logged-in and logged-out playback after every rule change.

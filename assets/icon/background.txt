@@ -1,0 +1,1 @@
+Adaptive foreground background color: #212327. Foreground PNG uses a centered 66% content region. Desktop icons use icon.png, generated from icon.svg.

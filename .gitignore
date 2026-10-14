@@ -1,0 +1,67 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+__pycache__/
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+# مخرجات البناء، بما فيها المكتبات المحلية — Build output, including local packages
+build/
+coverage/
+
+# حزم التوزيع وذاكرة Flatpak المؤقتة — Distribution packages and Flatpak cache
+/dist/
+/.flatpak-builder/
+
+# توزيعات CEF المُنزّلة؛ احتفظ بمصدر النسخة المعدّلة — Downloaded CEF; keep fork sources
+/third_party/webview_cef/third/cef/
+/third_party/webview_cef/macos/third/cef/
+/third_party/webview_cef/linux/prebuilt.zip
+/third_party/webview_cef/windows/prebuilt.zip
+
+# إعدادات محلية وأسرار؛ احتفظ بقوالب الإعدادات — Local settings and secrets; keep templates
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Widget Preview related
+.widget_preview/

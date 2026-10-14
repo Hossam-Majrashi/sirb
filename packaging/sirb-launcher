@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+base="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+export LD_LIBRARY_PATH="$base/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export CHROME_DEVEL_SANDBOX="$base/lib/chrome-sandbox"
+if [[ -n "${FLATPAK_ID:-}" ]]; then
+  export ZYPAK_CEF_LIBRARY_PATH="$base/lib/libcef.so"
+  exec zypak-wrapper "$base/sirb" "$@"
+fi
+# Read-only AppImage cannot provide a root-owned SUID sandbox. Use Chromium's
+# namespace sandbox; never silently turn it off when the kernel denies it.
+if ! unshare -Ur true 2>/dev/null; then
+  echo 'Sirb requires unprivileged user namespaces for its Chromium sandbox. Enable them in your distribution security settings or use the Flatpak package.' >&2
+  exit 78
+fi
+exec "$base/sirb" "$@"

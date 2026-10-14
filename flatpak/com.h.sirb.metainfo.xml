@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.h.sirb</id>
+  <name>Sirb</name>
+  <name xml:lang="ar">سرب</name>
+  <summary>A video-focused desktop Chromium browser</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <launchable type="desktop-id">com.h.sirb.desktop</launchable>
+  <developer id="com.h"><name>حسام حسن مجرشي</name></developer>
+  <url type="homepage">https://hossam-majrashi.github.io/Works/</url>
+  <description><p>Browse real websites with a persistent Chromium profile, video-aware sleeping tabs, local session recovery and resource controls.</p></description>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="1.0.0" date="2026-10-10"/></releases>
+</component>

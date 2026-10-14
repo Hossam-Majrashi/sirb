@@ -1,0 +1,5 @@
+# Sirb fork of webview_cef 0.6.2
+
+Retains upstream Apache-2.0 LICENSE. Pinned official CEF version is in third/download.cmake. Adds common/sirb_config.h and sirb_native.inc, document-start renderer V8 context injection via extra_info, native pre-transmission blocking, host visibility/mute/find/zoom/stop commands, downloads/fullscreen/favicon/navigation/popup events, a persistent cache/profile, and runtime GPU acceleration fallback. Events use the existing console-event method-channel dispatcher. Removes insecure web-security/SameSite switches; enables Linux namespace sandbox. Windows downloader now selects Arm64 when requested. Adds exported controller browserId/hostControl/setSize and handles early creation events safely. System resources are implemented separately under lib/platform.
+
+No renderer rule copies: Dart ad_rules.dart is the only rules source; compiled native patterns arrive through sirbConfigure. Linux plugin enables C++ exceptions for std::regex validation. GPU software fallback on macOS uses its existing onFrame path, and Windows chooses the pixel-buffer renderer when acceleration is disabled.
