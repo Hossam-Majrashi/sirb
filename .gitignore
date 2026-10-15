@@ -42,6 +42,9 @@ coverage/
 
 # توزيعات CEF المُنزّلة؛ احتفظ بمصدر النسخة المعدّلة — Downloaded CEF; keep fork sources
 /third_party/webview_cef/third/cef/
+/third_party/webview_cef/third/cef.lock
+/third_party/webview_cef/third/cef.prepare/
+/third_party/webview_cef/third/cef.previous/
 /third_party/webview_cef/macos/third/cef/
 /third_party/webview_cef/linux/prebuilt.zip
 /third_party/webview_cef/windows/prebuilt.zip

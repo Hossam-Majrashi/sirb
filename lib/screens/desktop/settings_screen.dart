@@ -126,7 +126,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await controller?.evaluateJavascript('''JSON.stringify({
       vp9:MediaSource.isTypeSupported('video/webm; codecs="vp9,opus"'),
       av1:MediaSource.isTypeSupported('video/webm; codecs="av01.0.05M.08,opus"'),
-      h264:MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'),
+      h264:MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"'),
+      aac:MediaSource.isTypeSupported('audio/mp4; codecs="mp4a.40.2"'),
+      h264aac:MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'),
       media:Array.from(document.querySelectorAll('video,audio')).map(v=>({playing:!v.paused,currentTime:v.currentTime,readyState:v.readyState,error:v.error&&v.error.code})),
       audio:window.__sirbAudioDiagnostics?.() ?? [],
       graphics:{webgpu:!!navigator.gpu,isolated:crossOriginIsolated,
@@ -392,9 +394,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     },
                   ),
                   SwitchListTile(
+                    title: Text(l.focusLoading),
+                    subtitle: Text(l.focusLoadingNotice),
+                    value: p.focusLoading,
+                    onChanged: (v) async {
+                      await p.set('focus_loading', v);
+                      await b.reconfigure();
+                    },
+                  ),
+                  SwitchListTile(
                     title: Text(l.preload),
                     value: p.preload,
-                    onChanged: p.gameMode
+                    onChanged: p.gameMode || p.focusLoading
                         ? null
                         : (v) async {
                             await p.set('preload', v);
@@ -435,6 +446,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: Text(l.restart),
                   ),
                   const SizedBox(height: 16),
+                ],
+              ),
+              ExpansionTile(
+                title: Text(l.youtube),
+                children: [
+                  SwitchListTile(
+                    title: Text(l.youtubeOriginalTitles),
+                    subtitle: Text(l.youtubeOriginalTitlesNotice),
+                    value: p.youtubeOriginalTitles,
+                    onChanged: (v) async {
+                      await p.set('youtube_original_titles', v);
+                      await b.reconfigure();
+                    },
+                  ),
                 ],
               ),
               ExpansionTile(

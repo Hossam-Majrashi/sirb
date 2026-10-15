@@ -9,6 +9,7 @@ import 'package:sirb/features/ads/services/ad_blocker.dart';
 import 'package:sirb/features/home/services/browser_controller.dart';
 import 'package:sirb/features/home/widgets/new_tab_page.dart';
 import 'package:sirb/features/home/widgets/tab_rail.dart';
+import 'package:sirb/features/home/widgets/stream_codec_notice.dart';
 import 'package:sirb/features/settings/services/preferences_service.dart';
 import 'package:sirb/platform/linux/linux_resources.dart';
 import 'package:sirb/platform/macos/macos_resources.dart';
@@ -274,6 +275,37 @@ void main() {
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+  testWidgets(
+    'stream codec warning fits desktop widths in Arabic and English',
+    (tester) async {
+      var details = 0;
+      for (final language in ['en', 'ar']) {
+        for (final width in [540.0, 1340.0]) {
+          tester.view.physicalSize = Size(width, 600);
+          tester.view.devicePixelRatio = 1;
+          await tester.pumpWidget(
+            app(
+              Column(
+                children: [
+                  StreamCodecNotice(onDetails: () => details++),
+                  const Expanded(child: SizedBox()),
+                ],
+              ),
+              language: language,
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(find.textContaining('H.264'), findsOneWidget);
+          await tester.tap(find.byIcon(Icons.troubleshoot));
+        }
+      }
+      expect(details, 4);
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    },
+  );
+
   testWidgets('onboarding progresses introduction, locale, appearance', (
     tester,
   ) async {

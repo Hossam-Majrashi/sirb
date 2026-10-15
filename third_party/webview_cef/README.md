@@ -321,6 +321,21 @@ These CMake options can be set on the plugin target (defaults shown):
 | `WEBVIEW_CEF_GPU_TEXTURE` | `ON` | Zero-copy GPU rendering (CEF `OnAcceleratedPaint` → Flutter GPU surface texture). Set `OFF` to fall back to the software pixel-buffer path. |
 | `WEBVIEW_CEF_USE_DEBUG_CEF` | `OFF` | Link/bundle the CEF **Debug** binaries even in Debug builds. By default Debug builds use the Release CEF binaries, because CEF's Debug DCHECKs crash off-screen rendering during IME. Turn `ON` only to step into CEF itself. |
 
+## Optional codec-enabled Standard Distributions
+
+The official default binaries do not guarantee H.264/AAC or DRM support. Sirb's
+Linux/Windows CMake and macOS CocoaPods preparation paths accept
+`SIRB_CEF_ARCHIVE_DIR`: a trusted local directory of exact-version, per-target
+Standard Distribution archives with bare SHA-256 `.sha256` sidecars. The source
+digest participates in cache identity; missing configured bundles, wrong versions
+and bad checksums fail instead of silently falling back. All runtime/resources,
+headers and wrapper sources must come from one reviewed compatible build.
+
+This option supplies no decoder binaries and does not make an official binary
+codec-capable. Actual MP4/MSE decoding and real streaming services must be tested
+before claiming support. See [Sirb codec build/verification instructions](../../docs/STREAM_CODECS.md)
+for supported targets, licensing considerations and the embedded-engine release gate.
+
 ## Updating CEF
 
 The CEF/Chromium version is pinned in one place — `CEF_VERSION` in [`third/download.cmake`](third/download.cmake). Bump it to update CEF on all three platforms: Windows and Linux download it automatically, and macOS reads the same `CEF_VERSION` (via `macos/scripts/download_cef.sh`, run by the podspec's `prepare_command`) and re-downloads on the next `pod install` — no manual placement needed.

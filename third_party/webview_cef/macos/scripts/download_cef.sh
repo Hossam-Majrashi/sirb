@@ -31,7 +31,7 @@ REPO_ROOT="$(cd "${MACOS_DIR}/.." && pwd)"           # repo root
 DEST="${MACOS_DIR}/third/cef"                        # where the podspec looks
 DOWNLOAD_CMAKE="${REPO_ROOT}/third/download.cmake"
 BUILD_TYPE="${CEF_WRAPPER_BUILD_TYPE:-Debug}"
-CDN="https://cef-builds.spotifycdn.com"
+CUSTOM_CMAKE="${REPO_ROOT}/third/custom_cef.cmake"
 
 err() { echo "error: $*" >&2; exit 1; }
 
@@ -86,8 +86,20 @@ verify_archs() {
   [ ${#missing[@]} -eq 0 ] || err "${path} is missing the ${missing[*]} slice(s) (has: ${have})"
 }
 
+command -v cmake >/dev/null || err "cmake not found (brew install cmake)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/cef_dl.XXXXXX")"
+trap 'rm -rf "${WORK}"' EXIT
+
 STAMP="${DEST}/version.txt"
 WANT="${CEF_VERSION}_${ARCH_TAG}_${BUILD_TYPE}"
+# Include the reviewed archive digest in the prepared-framework identity. A
+# previous official build must not silently win over a codec-enabled bundle.
+for arch in "${ARCHS[@]}"; do
+  pkg="$(cef_package "${arch}").tar.bz2"
+  cmake "-DCEF_IDENTITY_PACKAGE=${pkg}" "-DCEF_IDENTITY_OUTPUT=${WORK}/identity" -P "${CUSTOM_CMAKE}"
+  identity="$(<"${WORK}/identity")"
+  if [ "${identity}" != "${pkg}" ]; then WANT="${WANT}_${identity}"; fi
+done
 
 # --- skip if already prepared for this exact version/arch/type ---------------
 if [ -f "${STAMP}" ] && [ "$(cat "${STAMP}" 2>/dev/null)" = "${WANT}" ] \
@@ -106,23 +118,14 @@ else
   GENERATOR="Unix Makefiles"; BUILD_TOOL=(make -j"$(sysctl -n hw.ncpu)" libcef_dll_wrapper)
 fi
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/cef_dl.XXXXXX")"
-trap 'rm -rf "${WORK}"' EXIT
-
 # --- fetch and build one distribution per requested architecture -------------
 for arch in "${ARCHS[@]}"; do
   pkg="$(cef_package "${arch}")"
-  tarball="${WORK}/${pkg}.tar.bz2"
-  # CDN requires '+' percent-encoded as %2B.
-  url="${CDN}/$(printf '%s' "${pkg}.tar.bz2" | sed 's/+/%2B/g')"
-
-  echo "==> Downloading ${pkg}.tar.bz2"
-  curl -L --fail --connect-timeout 30 -o "${tarball}" "${url}"
-
-  echo "==> Extracting ${arch}"
-  tar -xjf "${tarball}" -C "${WORK}"
-  rm -f "${tarball}"
-  [ -d "${WORK}/${pkg}" ] || err "extracted dir ${WORK}/${pkg} not found"
+  # Shared checksum, source-inventory, exact-version and staging checks. The
+  # optional SIRB_CEF_ARCHIVE_DIR is respected for BOTH universal slices.
+  case "${arch}" in arm64) processor=arm64 ;; x86_64) processor=x86_64 ;; esac
+  cmake -DCMAKE_SYSTEM_NAME=Darwin "-DCMAKE_HOST_SYSTEM_PROCESSOR=${processor}" \
+    "-DCEF_PREPARE_DEST=${WORK}/${pkg}" -P "${DOWNLOAD_CMAKE}"
 
   echo "==> Building libcef_dll_wrapper (${BUILD_TYPE}, ${arch})"
   cmake -S "${WORK}/${pkg}" -B "${WORK}/${pkg}/build" -G "${GENERATOR}" \

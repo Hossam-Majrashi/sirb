@@ -17,6 +17,32 @@ No desktop ARMv7 or x86-32 outputs: unsupported by official Flutter. Android/iOS
 
 Linux packaging needs fpm, rpmbuild, dpkg-deb, tar, zstd and appimagetool. `./build_linux.sh` produces .rpm, .deb, .pkg.tar.zst, .tar.gz and AppImage for each available supported architecture. Debian/RPM dependency names are native to their package families; Arch metadata lists its own dependency names. The portable payload includes CEF, Flutter, desktop launcher and icon; GTK3/NSS/audio/OpenGL system libraries remain runtime dependencies. Use a compatible GTK3 distribution or Flatpak for a fixed userspace.
 
+## CEF cache recovery
+
+Linux and Windows use `third_party/webview_cef/third/download.cmake`. Matching
+`version.txt` is no longer enough to reuse `third/cef`: required runtime/resources
+and the platform's wrapper/header source lists are checked before CMake uses it.
+Missing nested files such as `libcef_dll/base/cef_atomic_flag.cc` trigger automatic
+replacement. Re-run `bash ./build_linux.sh` (or the normal Windows build); no
+`flutter clean`, Dart dependency upgrades or manual edits to CEF sources are needed.
+
+The replacement archive is downloaded from the pinned official CDN over verified
+TLS, checked against its published SHA-1 (transfer-integrity check, not a signature),
+extracted and validated in `third/cef.prepare`, and only then promoted into place.
+The current cache is retained on download/checksum/extraction/validation failure.
+A lock serializes preparation; interrupted promotion recovers `third/cef.previous`.
+Temporary/cache directories are ignored by git. Network and enough scratch disk
+for the old distribution, archive and extracted replacement are needed during repair.
+
+Standalone diagnostic (Linux):
+```
+cmake -DCEF_VALIDATE_ROOT="$PWD/third_party/webview_cef/third/cef" \\
+  -DCEF_VALIDATE_SYSTEM=Linux -P third_party/webview_cef/third/validate_cef.cmake
+python3 tool/test_cef_download.py
+```
+The hermetic tests need only Python 3.9+ and CMake; Windows/macOS inventory tests
+on Linux are not native builds. macOS still uses its CocoaPods preparation script.
+
 ## Sandbox
 
 The fork removes upstream's unconditional `--no-sandbox`, unsafe `--disable-web-security` and relaxed SameSite behavior on Linux. Normal Linux/AppImage uses Chromium's user-namespace sandbox (`--disable-setuid-sandbox`); the launcher runs `unshare -Ur true` and fails closed with a clear explanation when the distribution blocks user namespaces. It never falls back to `--no-sandbox`. AppImage read-only mounts cannot provide a root-owned SUID helper, so this does not rely on chmod 4755 inside an image. Flatpak runs through Zypak from Electron2.BaseApp, with `ZYPAK_CEF_LIBRARY_PATH` pointing at the bundled libcef.so, and D-Bus access to org.freedesktop.Flatpak for child sandbox spawning. Installed Flatpak is required for testing; `flatpak-builder --run` does not validate Zypak's installed-app spawning.
@@ -29,7 +55,11 @@ Linux CPU affinity uses libc sched_getaffinity to respect cpusets, then sched_se
 
 ## Codec licensing
 
-Official CEF binaries cannot be presumed to include H.264/AAC or Widevine. No proprietary codec support is advertised. VP9/AV1/Opus and an HLS H.264/AAC fixture are separate runtime probes; see verification output when available. To add licensed H.264/AAC support, build the matching CEF/Chromium source with `proprietary_codecs=true ffmpeg_branding="Chrome"` in GN_DEFINES, comply with patent/licensing obligations, and replace all three platform distributions with matching-version binaries and wrappers. Native HLS support is not assumed; MSE-based HLS playback also requires supported audio/video codecs. Server-side ads and DRM streams are not guaranteed supported.
+Actual Linux CEF 149 testing confirms missing H.264/AAC: the local MP4 fails with `DEMUXER_ERROR_NO_SUPPORTED_STREAMS`, while VP9/Opus plays. Many Twitch/Kick streams need H.264/AAC through MSE. Changing ad rules, autoplay flags, the user agent or system ffmpeg cannot add these decoders. The UI now reports that missing capability rather than suggesting playback is fixed.
+
+To integrate a legally distributable codec-enabled build, use the exact pinned CEF revision with `proprietary_codecs=true ffmpeg_branding="Chrome"`. Set `SIRB_CEF_ARCHIVE_DIR` to reviewed per-target Standard Distribution archives plus bare `.sha256` sidecars; Linux, Windows and macOS (including both universal slices) share checksum/version/inventory validation and digest-aware cache selection. Missing configured artifacts fail without falling back. A filename or checksum does not prove codec support. Full instructions, artifact names, licensing cautions and native build commands: [docs/STREAM_CODECS.md](docs/STREAM_CODECS.md).
+
+Before shipping, run `python3 tool/verify_stream_codecs.py --port 9241 --require-h264-aac` against an explicitly launched, isolated Sirb instance with loopback CDP. It requires actual MP4 and MSE frame progression, not only an API capability result. The current official binary **fails** this gate; no codec-enabled engine was built or supplied in this change. Native HLS, DRM/Widevine, real Twitch/Kick live/VOD/clip playback, and ad removal remain separate verification requirements.
 
 ## Verification on this host
 

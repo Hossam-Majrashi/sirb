@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:webview_cef/webview_cef.dart';
 import '../../features/ads/services/ad_blocker.dart';
 import '../../features/home/services/document_scripts.dart';
+import '../../features/home/services/page_features.dart';
 
 class BrowserEngine {
   BrowserEngine({required this.profile, required this.blocker});
@@ -14,9 +15,13 @@ class BrowserEngine {
     blocker.configuration(
       profile,
       documentTelemetry(
-        preload: blocker.preferences.preload,
-        colorScheme: colorScheme,
-      ),
+            preload: blocker.preferences.preload,
+            colorScheme: colorScheme,
+          ) +
+          pageFeatures(
+            focusLoading: blocker.preferences.focusLoading,
+            youtubeOriginalTitles: blocker.preferences.youtubeOriginalTitles,
+          ),
     ),
   );
   Future<void> initialize() async {

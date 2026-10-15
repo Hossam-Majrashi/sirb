@@ -121,6 +121,50 @@ void main() {
   );
 
   test(
+    'stream codec reports are scoped, deduplicated and reset on navigation',
+    () async {
+      await browser.initialize();
+      await browser.add(url: 'https://www.twitch.tv/fixture');
+      await drain();
+      final tab = browser.active!;
+      final listener = tab.controller!.listener!.onConsoleMessage!;
+      void report(Object h264, Object aac, {bool main = true}) => listener(
+        0,
+        '__sirb__${jsonEncode({'type': 'streamCompatibility', 'main': main, 'h264': h264, 'aac': aac})}',
+        '',
+        0,
+      );
+      report(false, false, main: false);
+      report('no', false);
+      expect(tab.missingStreamCodecs, false);
+      report(false, false);
+      expect(tab.missingStreamCodecs, true);
+      report(false, false);
+      await drain();
+      expect((await store.errorLogs(type: 'media')).length, 1);
+      expect(
+        calls.where((c) => c.method == 'loadUrl').last.arguments.toString(),
+        contains('twitch.tv/fixture'),
+      );
+      report(true, true);
+      expect(tab.missingStreamCodecs, false);
+      report(true, false);
+      expect(tab.missingStreamCodecs, true);
+      await browser.navigate('sirb:new');
+      expect(tab.missingStreamCodecs, false);
+      await browser.add(url: 'https://notkick.com/fixture');
+      await drain();
+      browser.active!.controller!.listener!.onConsoleMessage!(
+        0,
+        '__sirb__${jsonEncode({'type': 'streamCompatibility', 'main': true, 'h264': false, 'aac': false})}',
+        '',
+        0,
+      );
+      expect(browser.active!.missingStreamCodecs, false);
+    },
+  );
+
+  test(
     'native game diagnostics and lifecycle reach the shared store',
     () async {
       await browser.initialize();
@@ -253,6 +297,7 @@ void main() {
   test(
     'game mode clears speculation without changing budgets or playback',
     () async {
+      await browser.preferences.set('focus_loading', false);
       await browser.initialize();
       await browser.add(url: 'https://example.com/game');
       await drain();
@@ -277,6 +322,48 @@ void main() {
       await browser.preferences.set('game_mode', true);
       await browser.preferences.set('game_mode', false);
       expect(browser.preferences.preload, false);
+    },
+  );
+
+  test(
+    'focus loading clears speculation and updates live hosts without reloading media',
+    () async {
+      await browser.preferences.set('focus_loading', false);
+      await browser.initialize();
+      await browser.add(url: 'https://www.youtube.com/watch?v=fixture');
+      await drain();
+      final tab = browser.active!;
+      final controller = tab.controller;
+      tab.media = true;
+      await browser.preload('https://www.youtube.com/watch?v=other');
+      expect(browser.liveCount, 2);
+      calls.clear();
+      await browser.preferences.set('focus_loading', true);
+      await browser.preferences.set('youtube_original_titles', false);
+      await browser.reconfigure();
+      expect(browser.liveCount, 1);
+      expect(tab.controller, same(controller));
+      expect(tab.media, true);
+      expect(calls.where((call) => call.method == 'loadUrl'), isEmpty);
+      final controls = calls.where((call) => call.method == 'sirbControl');
+      expect(
+        controls.any(
+          (call) => call.arguments.toString().contains(
+            'window.__sirbFocusLoading=true;',
+          ),
+        ),
+        true,
+      );
+      expect(
+        controls.any(
+          (call) => call.arguments.toString().contains(
+            'window.__sirbOriginalTitles=false;',
+          ),
+        ),
+        true,
+      );
+      await browser.preload('https://www.youtube.com/watch?v=third');
+      expect(browser.liveCount, 1);
     },
   );
 

@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'ad_document_script.dart';
 import '../ad_rules.dart';
 import '../models/native_ad_configuration.dart';
 import '../../settings/services/preferences_service.dart';
@@ -35,26 +35,6 @@ class AdBlocker {
         allowed: exceptions,
         script: '$telemetry\n$documentScript',
       ).toMap();
-  String get documentScript {
-    if (!preferences.blocking) return '';
-    return '''(() => {
-      window.__sirbBlocking=false;
-      const host=location.hostname;
-      const exceptions=${jsonEncode(exceptions)};
-      const ancestors=location.ancestorOrigins;
-      const topHost=ancestors&&ancestors.length?new URL(ancestors[ancestors.length-1]).hostname:host;
-      if(exceptions.some(d=>[host,topHost].some(h=>h===d||h.endsWith('.'+d)))) return;
-      window.__sirbBlocking=true;
-      let selectors=${jsonEncode(cosmeticSelectorsGlobal)};
-      const sites=${jsonEncode(cosmeticSelectorsBySite)};
-      for(const [site,rules] of Object.entries(sites)) if(host===site||host.endsWith('.'+site)) selectors=selectors.concat(rules);
-      const install=()=>{
-        if(!document.documentElement) { setTimeout(install,0);return; }
-        const style=document.createElement('style'); style.id='sirb-cosmetic';
-        style.textContent=selectors.join(',')+'{display:none!important;visibility:hidden!important}';
-        document.documentElement.appendChild(style);
-      }; install();
-      ${youtubeScripts.join('\n')}
-    })();''';
-  }
+  String get documentScript =>
+      preferences.blocking ? adDocumentScript(exceptions) : '';
 }

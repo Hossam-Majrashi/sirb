@@ -10,6 +10,7 @@ import '../../../shared/services/resource_service.dart';
 import '../../settings/services/preferences_service.dart';
 import '../../settings/models/search_engine.dart';
 import '../models/address_target.dart';
+import 'page_features.dart';
 
 class BrowserController extends ChangeNotifier {
   BrowserController({
@@ -273,6 +274,7 @@ class BrowserController extends ChangeNotifier {
     tab.title = '';
     tab.icon = '';
     tab.blocked = 0;
+    tab.missingStreamCodecs = false;
     tab.videoPosition = 0;
     if (url == 'sirb:new') {
       await tab.controller?.dispose();
@@ -351,6 +353,7 @@ class BrowserController extends ChangeNotifier {
         onLoadStart: (_, url) {
           tab.loading = true;
           tab.loadError = null;
+          tab.missingStreamCodecs = false;
           tab.mediaFrames.clear();
           tab.media = false;
           tab.blocked = 0;
@@ -462,6 +465,7 @@ class BrowserController extends ChangeNotifier {
         tab.mediaFrames.clear();
         tab.loading = false;
         tab.loadError = null;
+        tab.missingStreamCodecs = false;
         tab.videoPosition = 0;
         tab.phase = TabPhase.sleeping;
       }
@@ -638,6 +642,28 @@ class BrowserController extends ChangeNotifier {
         tab.loading = event['loading'] as bool;
         tab.canBack = event['back'] as bool;
         tab.canForward = event['forward'] as bool;
+      case 'streamCompatibility':
+        final host = Uri.tryParse(tab.url)?.host ?? '';
+        if (event['main'] != true ||
+            ![
+              'twitch.tv',
+              'kick.com',
+            ].any((site) => host == site || host.endsWith('.$site')) ||
+            event['h264'] is! bool ||
+            event['aac'] is! bool) {
+          return;
+        }
+        final missing = event['h264'] != true || event['aac'] != true;
+        if (tab.missingStreamCodecs == missing) return;
+        tab.missingStreamCodecs = missing;
+        if (missing) {
+          _recordRuntimeError({
+            'category': 'media',
+            'message': 'This CEF engine lacks H.264 or AAC MSE support',
+            'operation': 'streamCodecProbe',
+            'details': jsonEncode({'h264': event['h264'], 'aac': event['aac']}),
+          }, fallbackUrl: tab.url);
+        }
       case 'media':
         final wasPlaying = tab.media;
         tab.mediaFrames[event['frame'] as String? ?? 'main'] =
@@ -930,7 +956,8 @@ class BrowserController extends ChangeNotifier {
     final speculative = _preloads.containsValue(tab);
     final enabled = engine.blocker.enabledFor(tab.url);
     final flags =
-        'window.__sirbSpeculative=$speculative;window.__sirbBlocking=$enabled;window.__sirbPreload=${preferences.preload};';
+        'window.__sirbSpeculative=$speculative;window.__sirbBlocking=$enabled;window.__sirbPreload=${preferences.preload};'
+        '${pageFeatures(focusLoading: preferences.focusLoading, youtubeOriginalTitles: preferences.youtubeOriginalTitles)}';
     await c.hostControl(
       'scripts',
       jsonEncode({

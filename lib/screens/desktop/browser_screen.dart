@@ -10,6 +10,7 @@ import '../../features/home/services/browser_controller.dart';
 import '../../features/home/widgets/address_bar.dart';
 import '../../features/home/widgets/new_tab_page.dart';
 import '../../features/home/widgets/tab_rail.dart';
+import '../../features/home/widgets/stream_codec_notice.dart';
 import '../../shared/models/browser_tab.dart';
 import '../../shared/models/device_info.dart';
 import '../../shared/services/app_runtime.dart';
@@ -649,6 +650,19 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
                                       icon: const Icon(Icons.close),
                                     ),
                                   ],
+                                ),
+                              ),
+                            if (b.active?.missingStreamCodecs == true &&
+                                !b.fullscreen)
+                              StreamCodecNotice(
+                                onDetails: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => ErrorLogsScreen(
+                                      store: b.store,
+                                      initialFilter: 'media',
+                                    ),
+                                  ),
                                 ),
                               ),
                             if (b.pressure && !b.fullscreen)

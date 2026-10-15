@@ -26,8 +26,12 @@ class PreferencesService extends ChangeNotifier {
       : gpu;
   int get idleMinutes => storage.getInt('idle_minutes') ?? 10;
   int get liveLimit => storage.getInt('live_limit') ?? 20;
-  // Preserve the saved preference while game mode suspends speculation.
-  bool get preload => !gameMode && (storage.getBool('preload') ?? true);
+  bool get focusLoading => storage.getBool('focus_loading') ?? true;
+  bool get youtubeOriginalTitles =>
+      storage.getBool('youtube_original_titles') ?? true;
+  // Preserve the saved choice while focus loading/game mode suspends speculation.
+  bool get preload =>
+      !gameMode && !focusLoading && (storage.getBool('preload') ?? true);
   int get preloadLimit => storage.getInt('preload_limit') ?? 2;
   bool get blocking => storage.getBool('blocking') ?? true;
   List<String> get allowlist => storage.getStringList('allowlist') ?? [];

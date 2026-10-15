@@ -797,8 +797,14 @@ abstract class AppLocalizations {
   /// No description provided for @codecNotice.
   ///
   /// In en, this message translates to:
-  /// **'VP9/AV1/Opus are supported. H.264/AAC HLS is unavailable in this official CEF build; a legally licensed custom CEF build and an HLS-capable player are required.'**
+  /// **'Codec support depends on the bundled CEF build. Twitch and Kick commonly require H.264 and AAC via MSE. Check both in diagnostics; if unavailable, use a matching, legally licensed codec-enabled CEF distribution. Ad-block settings cannot add decoders. Native HLS and DRM are separate capabilities.'**
   String get codecNotice;
+
+  /// No description provided for @streamCodecUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This engine lacks H.264 or AAC support commonly required by Twitch and Kick. A codec-enabled engine build is needed; changing ad-block settings cannot add these decoders.'**
+  String get streamCodecUnavailable;
 
   /// No description provided for @engineError.
   ///
@@ -1111,6 +1117,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The OS and driver select the rendering adapter. The browser cannot combine integrated and discrete GPU memory or force 100% utilization. Low usage can indicate a CPU, frame-rate or frame-copy bottleneck.'**
   String get gpuSchedulingNotice;
+
+  /// No description provided for @focusLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Load visible content first'**
+  String get focusLoading;
+
+  /// No description provided for @focusLoadingNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Suspend speculative video preloads and hint off-screen images and visible-content frames to load lazily. Identifiable hidden YouTube comment/recommendation continuations wait until you approach them (up to 15 seconds). Playback requests are not delayed. Sites may bundle content or start requests before hints apply; this is not a complete network filter. Disable if a site has trouble.'**
+  String get focusLoadingNotice;
+
+  /// No description provided for @youtube.
+  ///
+  /// In en, this message translates to:
+  /// **'YouTube'**
+  String get youtube;
+
+  /// No description provided for @youtubeOriginalTitles.
+  ///
+  /// In en, this message translates to:
+  /// **'Prefer original video titles'**
+  String get youtubeOriginalTitles;
+
+  /// No description provided for @youtubeOriginalTitlesNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Use YouTube public metadata for visible video titles, including search results, without changing your search or interface language. Up to two small lookups at once; no hidden-card lookups. If metadata is unavailable or itself localized, the original title cannot be guaranteed. Does not translate audio or change subtitles. Changes apply immediately; reload to reset site-managed titles if needed.'**
+  String get youtubeOriginalTitlesNotice;
 
   /// No description provided for @mouseNavigation.
   ///

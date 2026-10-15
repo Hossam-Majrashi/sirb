@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'runtime_error_script.dart';
+import 'video_priority_script.dart';
+import 'stream_compatibility_script.dart';
 
 String documentTelemetry({
   required bool preload,
@@ -19,6 +21,8 @@ String documentTelemetry({
   const main=window===window.top;
   const send=data=>console.debug('__sirb__'+JSON.stringify(data));
   $runtimeErrorTelemetry
+  $videoPriorityScript
+  $streamCompatibilityScript
   let audioContexts=0,rtcTracks=0;
   const audioRefs=new Set();
   window.__sirbAudioDiagnostics=()=>{
@@ -73,7 +77,8 @@ String documentTelemetry({
       (/(^|\\.)youtube\\.com\$/.test(url.hostname) && /^\\/(watch|shorts)/.test(url.pathname)) ||
       (/(^|\\.)vimeo\\.com\$/.test(url.hostname) && /^\\/\\d+/.test(url.pathname)) ||
       (/(^|\\.)dailymotion\\.com\$/.test(url.hostname) && /^\\/video\\//.test(url.pathname)) ||
-      (/(^|\\.)twitch\\.tv\$/.test(url.hostname) && url.pathname.length > 1);
+      (/(^|\\.)twitch\\.tv\$/.test(url.hostname) && url.pathname.length > 1) ||
+      (/(^|\\.)kick\\.com\$/.test(url.hostname) && url.pathname.length > 1);
     if(!isVideo)return null;
     return url.href;
   };

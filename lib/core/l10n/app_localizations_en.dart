@@ -382,7 +382,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get codecNotice =>
-      'VP9/AV1/Opus are supported. H.264/AAC HLS is unavailable in this official CEF build; a legally licensed custom CEF build and an HLS-capable player are required.';
+      'Codec support depends on the bundled CEF build. Twitch and Kick commonly require H.264 and AAC via MSE. Check both in diagnostics; if unavailable, use a matching, legally licensed codec-enabled CEF distribution. Ad-block settings cannot add decoders. Native HLS and DRM are separate capabilities.';
+
+  @override
+  String get streamCodecUnavailable =>
+      'This engine lacks H.264 or AAC support commonly required by Twitch and Kick. A codec-enabled engine build is needed; changing ad-block settings cannot add these decoders.';
 
   @override
   String engineError(String error) {
@@ -561,6 +565,23 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get gpuSchedulingNotice =>
       'The OS and driver select the rendering adapter. The browser cannot combine integrated and discrete GPU memory or force 100% utilization. Low usage can indicate a CPU, frame-rate or frame-copy bottleneck.';
+
+  @override
+  String get focusLoading => 'Load visible content first';
+
+  @override
+  String get focusLoadingNotice =>
+      'Suspend speculative video preloads and hint off-screen images and visible-content frames to load lazily. Identifiable hidden YouTube comment/recommendation continuations wait until you approach them (up to 15 seconds). Playback requests are not delayed. Sites may bundle content or start requests before hints apply; this is not a complete network filter. Disable if a site has trouble.';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get youtubeOriginalTitles => 'Prefer original video titles';
+
+  @override
+  String get youtubeOriginalTitlesNotice =>
+      'Use YouTube public metadata for visible video titles, including search results, without changing your search or interface language. Up to two small lookups at once; no hidden-card lookups. If metadata is unavailable or itself localized, the original title cannot be guaranteed. Does not translate audio or change subtitles. Changes apply immediately; reload to reset site-managed titles if needed.';
 
   @override
   String get mouseNavigation => 'Mouse side buttons';
