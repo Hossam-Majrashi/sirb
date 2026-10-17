@@ -240,7 +240,7 @@ class BrowserStore {
     final conditions = <String>[];
     final args = <Object?>[];
     if (type == 'errors') {
-      conditions.add("type != 'ad'");
+      conditions.add("type NOT IN ('ad', 'performance', 'compatibility')");
     } else if (type != null && type.isNotEmpty && type != 'all') {
       conditions.add('type = ?');
       args.add(type);
@@ -267,7 +267,7 @@ class BrowserStore {
   Future<void> clearErrorLogs({String? type}) => db.delete(
     'error_logs',
     where: type == 'errors'
-        ? "type != 'ad'"
+        ? "type NOT IN ('ad', 'performance', 'compatibility')"
         : (type == null || type.isEmpty || type == 'all' ? null : 'type = ?'),
     whereArgs: type == 'errors' || type == null || type.isEmpty || type == 'all'
         ? null
@@ -278,7 +278,8 @@ class BrowserStore {
     final String sql;
     final List<Object?> args;
     if (type == 'errors') {
-      sql = "SELECT COUNT(*) as count FROM error_logs WHERE type != 'ad'";
+      sql =
+          "SELECT COUNT(*) as count FROM error_logs WHERE type NOT IN ('ad', 'performance', 'compatibility')";
       args = [];
     } else if (type == null || type.isEmpty || type == 'all') {
       sql = 'SELECT COUNT(*) as count FROM error_logs';

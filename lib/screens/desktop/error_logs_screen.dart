@@ -178,6 +178,8 @@ class _ErrorLogsScreenState extends State<ErrorLogsScreen> {
   IconData _iconForType(String type) => switch (type) {
     'ad' => Icons.shield_outlined,
     'network' => Icons.cloud_off_outlined,
+    'performance' => Icons.speed_outlined,
+    'compatibility' => Icons.info_outline,
     'crash' => Icons.error_outline,
     'system' => Icons.settings_suggest_outlined,
     'flutter' => Icons.flutter_dash,
@@ -191,6 +193,8 @@ class _ErrorLogsScreenState extends State<ErrorLogsScreen> {
     'system' => l.systemLogs,
     'flutter' => l.flutterLogs,
     'javascript' => l.javascriptLogs,
+    'performance' => l.performanceLogs,
+    'compatibility' => l.compatibilityLogs,
     'graphics' => l.graphicsLogs,
     'media' => l.mediaLogs,
     'permission' => l.permissionLogs,
@@ -250,6 +254,11 @@ class _ErrorLogsScreenState extends State<ErrorLogsScreen> {
               padding: const EdgeInsets.all(12),
               child: Text(l.errorCaptureNotice),
             ),
+            if (_activeFilter == 'compatibility')
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(l.compatibilityLogsNotice),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: SingleChildScrollView(
@@ -317,6 +326,12 @@ class _ErrorLogsScreenState extends State<ErrorLogsScreen> {
                     const SizedBox(width: 8),
                     for (final (category, label, icon) in [
                       ('javascript', l.javascriptLogs, Icons.code),
+                      ('performance', l.performanceLogs, Icons.speed_outlined),
+                      (
+                        'compatibility',
+                        l.compatibilityLogs,
+                        Icons.info_outline,
+                      ),
                       ('graphics', l.graphicsLogs, Icons.monitor),
                       ('media', l.mediaLogs, Icons.volume_up_outlined),
                       ('permission', l.permissionLogs, Icons.lock_outline),
@@ -427,14 +442,17 @@ class _ErrorLogsScreenState extends State<ErrorLogsScreen> {
                                     color: theme.colorScheme.primary,
                                   ),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    _labelForType(l, entry.type),
-                                    style: theme.textTheme.labelLarge?.copyWith(
-                                      color: theme.colorScheme.primary,
-                                      fontWeight: FontWeight.bold,
+                                  Expanded(
+                                    child: Text(
+                                      _labelForType(l, entry.type),
+                                      style: theme.textTheme.labelLarge
+                                          ?.copyWith(
+                                            color: theme.colorScheme.primary,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                     ),
                                   ),
-                                  const Spacer(),
+                                  const SizedBox(width: 8),
                                   Text(
                                     timeStr,
                                     style: theme.textTheme.bodySmall?.copyWith(

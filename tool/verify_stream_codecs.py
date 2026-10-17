@@ -21,10 +21,18 @@ from verify_game import CDP
 
 
 PAGE = '''<!doctype html><html><head><meta charset="utf-8"><title>Sirb codec probe</title></head>
-<body><video id="control" controls muted loop src="/control.webm"></video>
-<video id="mp4" controls muted loop src="/clip.mp4"></video>
-<video id="mse" controls muted></video>
+<body><div><video id="control" controls muted loop src="/control.webm"></video>
+<button id="play-control" onclick="startNative('control')">Play VP9</button></div>
+<div><video id="mp4" controls muted loop src="/clip.mp4"></video>
+<button id="play-mp4" onclick="startNative('mp4')">Play MP4</button></div>
+<div><video id="mse" controls muted></video>
+<button id="play-mse" onclick="startMse()">Play MSE</button></div>
 <script>
+window.playResults=[];
+window.startNative=async id=>{
+  try{await document.getElementById(id).play();playResults.push({id,accepted:true});}
+  catch(error){playResults.push({id,accepted:false,error:String(error)});}
+};
 window.mseResult={state:'not-started'};
 window.startMse=async()=>{
   const type='video/mp4;codecs="avc1.42C01E,mp4a.40.2"';
@@ -112,12 +120,18 @@ def main():
           nativeMp4:document.createElement('video').canPlayType('video/mp4;codecs="avc1.42C01E,mp4a.40.2"'),
           nativeHls:document.createElement('video').canPlayType('application/vnd.apple.mpegurl')
         })''')
-        play = page.evaluate('''Promise.all(['control','mp4'].map(async id=>{
-          const video=document.getElementById(id);
-          try{await video.play();return {id,accepted:true};}
-          catch(error){return {id,accepted:false,error:String(error)};}
-        }))''', gesture=True)
-        page.evaluate('window.startMse()')
+        # Exercise real trusted player intent, just like a user; a CDP evaluate
+        # userGesture alone must not bypass Sirb's manual playback policy.
+        for media_id in ['control', 'mp4', 'mse']:
+            rect = page.evaluate('''(()=>{const b=document.getElementById('play-MEDIA');
+              b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();
+              return {x:r.x+r.width/2,y:r.y+r.height/2};})()'''.replace('MEDIA', media_id))
+            for kind in ['mousePressed', 'mouseReleased']:
+                page.call('Input.dispatchMouseEvent', type=kind, button='left', clickCount=1, **rect)
+        deadline = time.monotonic()+10
+        while time.monotonic()<deadline and page.evaluate('playResults.length')<2:
+            time.sleep(.1)
+        play = page.evaluate('playResults')
         snapshot = '''Array.from(document.querySelectorAll('video')).map(v=>({
           id:v.id,paused:v.paused,time:v.currentTime,ready:v.readyState,
           error:v.error?{code:v.error.code,message:v.error.message}:null,

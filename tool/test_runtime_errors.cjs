@@ -9,7 +9,7 @@ class FakeElement extends EventTarget {
   requestPointerLock(...args) { nativeCalls.push({self:this,args}); return Promise.reject(rejected); }
   requestFullscreen() { return Promise.reject(new Error('Fullscreen denied')); }
 }
-class FakeMedia extends EventTarget { play() { return Promise.resolve(42); } }
+class FakeMedia extends EventTarget { play() { return this.failure ? Promise.reject(this.failure) : Promise.resolve(42); } }
 class FakeAudio { resume() { return Promise.reject(new Error('Audio resume denied')); } }
 class FakeAudioWorklet { addModule() { return Promise.reject(new Error('Worklet load failed')); } }
 class FakeWorker extends EventTarget { constructor(url) { super(); this.url = url; } }
@@ -37,6 +37,35 @@ vm.runInNewContext(fs.readFileSync(process.argv[2],'utf8'), scope);
   assert.equal(nativeCalls[0].self,element);
   assert.deepEqual(nativeCalls[0].args,[{unadjustedMovement:true}]);
   assert.equal(await new FakeMedia().play(),42);
+  const media=new FakeMedia();
+  for(const [name,message] of [
+    ['AbortError','The play() request was interrupted by a call to pause(). https://goo.gl/LdLk22'],
+    ['AbortError','The play() request was interrupted by a new load request.'],
+    ['NotAllowedError','Sirb requires player interaction before playback'],
+  ]){
+    const before=reports.length;
+    media.failure=Object.assign(new Error(message),{name});
+    await assert.rejects(media.play(),e=>e===media.failure);
+    const unhandled=new Event('unhandledrejection');unhandled.reason=media.failure;root.dispatchEvent(unhandled);
+    assert.equal(reports.length,before,'Expected lifecycle/policy rejection is not a fault');
+  }
+  for(const name of ['NotSupportedError','NotAllowedError','AbortError']){
+    const before=reports.length;
+    media.failure=Object.assign(new Error('Real decoder/permission/operation failure'),{name});
+    await assert.rejects(media.play(),e=>e===media.failure);
+    const unhandled=new Event('unhandledrejection');unhandled.reason=media.failure;root.dispatchEvent(unhandled);
+    assert.equal(reports.length,before+1,'Real errors stay visible without duplicate unhandled reports');
+    assert.equal(reports.at(-1).category,'media');
+  }
+  const beforeResource=reports.length;
+  const emptyResource=new Event('error');
+  Object.defineProperty(emptyResource,'target',{value:{src:scope.location.href,getAttribute:()=>''}});
+  root.dispatchEvent(emptyResource);
+  assert.equal(reports.length,beforeResource,'Empty src must not falsely blame the document URL');
+  const resource=new Event('error');
+  Object.defineProperty(resource,'target',{value:{src:'https://fixture.test/missing.png',tagName:'IMG',getAttribute:key=>key==='src'?'/missing.png':null}});
+  root.dispatchEvent(resource);
+  assert.equal(reports.at(-1).source,'https://fixture.test/missing.png');
   await assert.rejects(new FakeAudio().resume(),/Audio resume denied/);
   assert.equal(reports.filter(r=>r.operation==='resume').length,1,'Audio aliases must not wrap twice');
   await assert.rejects(new FakeAudioWorklet().addModule(),/Worklet load failed/);

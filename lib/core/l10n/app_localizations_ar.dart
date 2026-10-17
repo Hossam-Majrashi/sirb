@@ -525,6 +525,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get javascriptLogs => 'JavaScript / وحدة التحكم';
 
   @override
+  String get performanceLogs => 'تلميحات الأداء';
+
+  @override
+  String get compatibilityLogs => 'تنبيهات التوافق والحماية';
+
+  @override
+  String get compatibilityLogsNotice =>
+      'تحتفظ هذه التنبيهات بفحص يوتيوب الاختياري لتوفّر WebGPU ومحاولاته المحظورة لتشغيل سكربت داخل إطار محمي. لا تثبت وحدها فشل تشغيل الفيديو أو نجاحه. تبقى أعطال الوسائط والشبكة وجهاز الرسوم ورفض أذونات المستخدم ضمن الأخطاء. لم تُضعف حماية الإطارات أو إعدادات GPU.';
+
+  @override
   String get graphicsLogs => 'الرسوم';
 
   @override

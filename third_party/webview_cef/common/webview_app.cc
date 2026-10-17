@@ -16,6 +16,16 @@
 
 namespace {
 
+// Sirb's page policies target web content only, not utility about:blank/srcdoc
+// contexts (often deliberately sandboxed by the site). Do not Eval in those
+// frames, including on live policy updates. Never add allow-scripts or change
+// Chromium's sandbox to make our injection succeed.
+bool SirbWebContentFrame(CefRefPtr<CefFrame> frame) {
+    if (!frame || !frame->IsValid()) return false;
+    const std::string url = frame->GetURL();
+    return url.rfind("https://", 0) == 0 || url.rfind("http://", 0) == 0;
+}
+
 // When using the Views framework this object provides the delegate
 // implementation for the CefWindow that hosts the Views-based browser.
 class SimpleWindowDelegate : public CefWindowDelegate {
@@ -143,6 +153,12 @@ void WebviewApp::OnBeforeCommandLineProcessing(const CefString &process_type, Ce
 			command_line->AppendSwitch("disable-gpu-compositing");
 		}
 #endif
+
+        // Sirb has no Chrome-extension management/consent surface. Do not run
+        // externally installed system extensions (e.g. Plasma Integration),
+        // whose page-script injection can fail in sandboxed utility frames.
+        // This does not disable Sirb's CefRegisterExtension V8 bridge.
+        command_line->AppendSwitch("disable-extensions");
 
         // Retain Chromium's web security, certificate checks and sandbox defaults.
 #if defined(OS_WIN) || defined(OS_MAC)
@@ -321,6 +337,7 @@ void WebviewApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 
 void WebviewApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
+    if (!SirbWebContentFrame(frame)) return;
     auto token=sirb_tokens_.find(browser->GetIdentifier());
     if(token==sirb_tokens_.end())return;
     const auto bootstrap=std::string("(()=>{try{const r=new XMLHttpRequest();r.open('GET','sirb://config/',false);r.setRequestHeader('X-Sirb-Key','")+token->second+"');r.setRequestHeader('X-Sirb-Browser','"+std::to_string(browser->GetIdentifier())+"');r.send();return r.status===200?r.responseText:'';}catch(_){return '';}})()";
@@ -361,6 +378,7 @@ bool WebviewApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 {
     const CefString& message_name = message->GetName();
     if(message_name=="sirbUpdateScript") {
+        if (!SirbWebContentFrame(frame)) return true;
         auto context=frame->GetV8Context();
         if(context && context->IsValid() && context->Enter()) {
             CefRefPtr<CefV8Value> result; CefRefPtr<CefV8Exception> error;

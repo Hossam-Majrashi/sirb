@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'runtime_error_script.dart';
+import 'media_playback_script.dart';
 import 'video_priority_script.dart';
 import 'stream_compatibility_script.dart';
 
@@ -10,13 +11,7 @@ String documentTelemetry({
     '''(() => {
   if(window.__sirbTelemetry) return; window.__sirbTelemetry=true;
   window.__sirbPreload=${preload ? 'true' : 'false'};
-  const speculative=()=>window.__sirbSpeculative&&!navigator.userActivation.hasBeenActive;
-  const nativePlay=HTMLMediaElement.prototype.play;
-  HTMLMediaElement.prototype.play=function(...args){
-    if(speculative())return Promise.reject(new DOMException('Speculative tab requires user activation','NotAllowedError'));
-    return nativePlay.apply(this,args);
-  };
-  document.addEventListener('play',e=>{if(speculative()&&e.target instanceof HTMLMediaElement)e.target.pause();},true);
+  $mediaPlaybackScript
   const frame=location.href+':'+Math.random().toString(36).slice(2);
   const main=window===window.top;
   const send=data=>console.debug('__sirb__'+JSON.stringify(data));

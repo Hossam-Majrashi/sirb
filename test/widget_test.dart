@@ -228,6 +228,96 @@ void main() {
     },
     skip: !Platform.isLinux,
   );
+  testWidgets(
+    'compatibility notices are localized and separated from real failures',
+    (tester) async {
+      await tester.runAsync(() async {
+        await store.recordErrorLog(
+          type: 'compatibility',
+          message: 'retained YouTube probe',
+          details: 'webgpuAdapterUnavailable',
+        );
+        await store.recordErrorLog(
+          type: 'graphics',
+          message: 'real GPU device loss',
+        );
+      });
+      for (final language in ['en', 'ar']) {
+        for (final size in [const Size(800, 600), const Size(1600, 900)]) {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          await tester.runAsync(() async {
+            await tester.pumpWidget(
+              app(
+                ErrorLogsScreen(store: store, initialFilter: 'compatibility'),
+                language: language,
+              ),
+            );
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          });
+          await tester.pumpAndSettle();
+          final l = AppLocalizations.of(
+            tester.element(find.byType(ErrorLogsScreen)),
+          );
+          expect(find.text(l.compatibilityLogs), findsWidgets);
+          expect(find.text(l.compatibilityLogsNotice), findsOneWidget);
+          expect(find.text('retained YouTube probe'), findsOneWidget);
+          expect(find.text('real GPU device loss'), findsNothing);
+          await tester.tap(find.widgetWithText(FilterChip, l.errorLogs));
+          await tester.pump();
+          // Let the FFI database worker answer after the input frame has run.
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          });
+          await tester.pumpAndSettle();
+          expect(find.text('real GPU device loss'), findsOneWidget);
+          expect(find.text('retained YouTube probe'), findsNothing);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        }
+      }
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    },
+  );
+
+  testWidgets('performance filter is localized and shows retained hints', (
+    tester,
+  ) async {
+    await tester.runAsync(
+      () => store.recordErrorLog(
+        type: 'performance',
+        message: 'unused preload fixture',
+        details: 'unusedPreload',
+      ),
+    );
+    for (final language in ['en', 'ar']) {
+      for (final size in [const Size(800, 600), const Size(1600, 900)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            app(
+              ErrorLogsScreen(store: store, initialFilter: 'performance'),
+              language: language,
+            ),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pumpAndSettle();
+        expect(find.text('unused preload fixture'), findsOneWidget);
+        expect(
+          find.text(language == 'ar' ? 'تلميحات الأداء' : 'Performance hints'),
+          findsWidgets,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    }
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+
   testWidgets('all auxiliary screens fit desktop sizes and both directions', (
     tester,
   ) async {
@@ -440,6 +530,60 @@ void main() {
 
       await store.clearErrorLogs(type: 'errors');
       expect(await store.errorLogCount(type: 'errors'), 0);
+      expect(await store.errorLogCount(), 0);
+    },
+  );
+
+  test(
+    'compatibility notices remain in all/search/export and survive error-only clear',
+    () async {
+      await store.recordErrorLog(
+        type: 'compatibility',
+        message: 'retained notice',
+        url: 'https://www.youtube.com/watch?v=fixture',
+        details: 'frameSandboxBlockedScript',
+      );
+      await store.recordErrorLog(
+        type: 'network',
+        message: 'actual 403 failure',
+      );
+      expect(await store.errorLogCount(), 2);
+      expect(await store.errorLogCount(type: 'errors'), 1);
+      expect(await store.errorLogCount(type: 'compatibility'), 1);
+      expect((await store.errorLogs(type: 'errors')).single.type, 'network');
+      expect(
+        await store.errorLogs(type: 'all', query: 'frameSandbox', limit: null),
+        hasLength(1),
+      );
+      await store.clearErrorLogs(type: 'errors');
+      expect((await store.errorLogs()).single.type, 'compatibility');
+      await store.clearErrorLogs(type: 'compatibility');
+      expect(await store.errorLogCount(), 0);
+    },
+  );
+
+  test(
+    'performance hints remain searchable/exportable outside error-only logs',
+    () async {
+      await store.recordErrorLog(
+        type: 'performance',
+        message: 'unused preload hint',
+        url: 'https://example.com',
+        details: 'unusedPreload',
+      );
+      await store.recordErrorLog(type: 'network', message: 'genuine failure');
+      expect(await store.errorLogCount(type: 'all'), 2);
+      expect(await store.errorLogCount(type: 'errors'), 1);
+      expect(await store.errorLogCount(type: 'performance'), 1);
+      expect(await store.errorLogs(type: 'errors'), hasLength(1));
+      expect(
+        await store.errorLogs(type: 'all', query: 'preload', limit: null),
+        hasLength(1),
+      );
+      await store.clearErrorLogs(type: 'errors');
+      expect(await store.errorLogCount(), 1);
+      expect((await store.errorLogs()).single.type, 'performance');
+      await store.clearErrorLogs(type: 'performance');
       expect(await store.errorLogCount(), 0);
     },
   );

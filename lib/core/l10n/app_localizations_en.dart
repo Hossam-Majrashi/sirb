@@ -527,6 +527,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get javascriptLogs => 'JavaScript / console';
 
   @override
+  String get performanceLogs => 'Performance hints';
+
+  @override
+  String get compatibilityLogs => 'Compatibility and protection notices';
+
+  @override
+  String get compatibilityLogsNotice =>
+      'These notices retain YouTube\'s optional WebGPU capability probe and blocked sandbox-script attempts. They do not by themselves establish playback failure or success. Real media, network, graphics-device and user-permission failures remain in Errors. Frame protection and GPU settings were not weakened.';
+
+  @override
   String get graphicsLogs => 'Graphics';
 
   @override

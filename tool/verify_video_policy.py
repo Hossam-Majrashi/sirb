@@ -139,10 +139,20 @@ def main():
                 js("document.querySelector('#media').play()")
                 wait(lambda: js("return document.querySelector('#media').currentTime>2.3"), 'resumes after seek')
                 playback[host] = js("const v=document.querySelector('#media');return {position:v.currentTime,error:v.error,decoded:v.getVideoPlaybackQuality().totalVideoFrames}")
+                js('''window.sheetProbe={sheet:document.querySelector('#sirb-cosmetic'),mutations:0};
+                  window.sheetObserver=new MutationObserver(records=>{
+                    for(const r of records)if(r.target===sheetProbe.sheet ||
+                      [...r.addedNodes,...r.removedNodes].includes(sheetProbe.sheet))sheetProbe.mutations++;
+                  });sheetObserver.observe(document,{childList:true,subtree:true,characterData:true});''')
                 js(policy['ads'])
                 assert js("return document.querySelectorAll('#sirb-cosmetic').length") == 1
+                assert js("return document.querySelector('#sirb-cosmetic')===sheetProbe.sheet"), 'reuse the live cosmetic sheet'
+                assert js('return sheetProbe.mutations') == 0, 'unchanged policy must not churn layout styles'
+                js('sheetObserver.disconnect()')
                 js(policy['excepted'])
                 assert js('return window.__sirbBlocking') == (host == 'unrelated.test')
+                if host != 'unrelated.test':
+                    assert js("return !document.querySelector('#sirb-cosmetic')"), 'site exception removes the old sheet'
 
             navigate('www.youtube.com')
             assert js("return !('adPlacements' in JSON.parse('{\"adPlacements\":[],\"videoDetails\":{}}'))")

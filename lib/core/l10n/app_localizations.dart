@@ -1046,6 +1046,24 @@ abstract class AppLocalizations {
   /// **'JavaScript / console'**
   String get javascriptLogs;
 
+  /// No description provided for @performanceLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Performance hints'**
+  String get performanceLogs;
+
+  /// No description provided for @compatibilityLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatibility and protection notices'**
+  String get compatibilityLogs;
+
+  /// No description provided for @compatibilityLogsNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'These notices retain YouTube\'s optional WebGPU capability probe and blocked sandbox-script attempts. They do not by themselves establish playback failure or success. Real media, network, graphics-device and user-permission failures remain in Errors. Frame protection and GPU settings were not weakened.'**
+  String get compatibilityLogsNotice;
+
   /// No description provided for @graphicsLogs.
   ///
   /// In en, this message translates to:

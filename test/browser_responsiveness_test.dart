@@ -120,6 +120,76 @@ void main() {
     },
   );
 
+  test('diagnostic echoes are correlated without hiding real failures', () async {
+    await browser.initialize();
+    await browser.add(url: 'https://www.youtube.com/watch?v=fixture');
+    await drain();
+    final listener = browser.active!.controller!.listener!.onConsoleMessage!;
+    void event(Map<String, Object?> value) =>
+        listener(0, '__sirb__${jsonEncode(value)}', '', 0);
+    const resize =
+        'ResizeObserver loop completed with undelivered notifications.';
+    const source = 'https://static.doubleclick.net/instream/ad_status.js';
+    listener(4, resize, browser.active!.url, 0);
+    event({
+      'type': 'runtimeError',
+      'category': 'javascript',
+      'message': resize,
+      'source': browser.active!.url,
+      'line': 0,
+      'column': 0,
+    });
+    event({
+      'type': 'runtimeError',
+      'category': 'network',
+      'message': 'Document resource failed',
+      'source': source,
+      'resourceTag': 'SCRIPT',
+    });
+    event({'type': 'blocked', 'url': source});
+    event({
+      'type': 'runtimeError',
+      'category': 'network',
+      'message': 'Resource request failed',
+      'source': source,
+      'httpStatus': 403,
+    });
+    listener(3, 'No available adapters.', browser.active!.url, 0);
+    listener(
+      4,
+      "Blocked script execution in 'about:blank' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.",
+      'https://www.youtube.com/s/_/ytmainappweb/_/js/test-module',
+      17593,
+    );
+    await drain();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final logs = await store.errorLogs();
+    expect(logs.where((r) => r.message == resize), hasLength(1));
+    expect(
+      logs.singleWhere((r) => r.message == resize).details,
+      contains('recoverable'),
+    );
+    expect(logs.where((r) => r.type == 'ad'), hasLength(1));
+    expect(logs.where((r) => r.type == 'network'), hasLength(1));
+    expect(
+      logs.singleWhere((r) => r.type == 'network').details,
+      contains('403'),
+    );
+    final notices = logs.where((r) => r.type == 'compatibility');
+    expect(notices, hasLength(2));
+    final details = notices.map((r) => jsonDecode(r.details!)).toList();
+    expect(
+      details.map((d) => d['diagnostic']),
+      containsAll(['webgpuAdapterUnavailable', 'frameSandboxBlockedScript']),
+    );
+    expect(
+      details.map((d) => d['originalCategory']),
+      containsAll(['graphics', 'permission']),
+    );
+    expect(details.every((d) => d['advisory'] == true), true);
+    expect(await store.errorLogCount(type: 'errors'), 2);
+  });
+
   test(
     'stream codec reports are scoped, deduplicated and reset on navigation',
     () async {
@@ -198,6 +268,56 @@ void main() {
       );
     },
   );
+
+  test('native-window ad evidence uses the same diagnostic routing', () async {
+    await browser.initialize();
+    Future<void> event(Map<String, Object?> value) => WebviewManager()
+        .methodCallhandler(MethodCall('sirbNativeEvent', jsonEncode(value)));
+    const source = 'https://static.doubleclick.net/instream/ad_status.js';
+    await event({'type': 'gameWindowOpened', 'windowId': 701});
+    await event({
+      'type': 'runtimeError',
+      'windowId': 701,
+      'category': 'network',
+      'message': 'Document resource failed',
+      'source': source,
+      'resourceTag': 'SCRIPT',
+    });
+    await event({'type': 'blocked', 'windowId': 701, 'url': source});
+    await event({
+      'type': 'runtimeError',
+      'windowId': 701,
+      'category': 'network',
+      'message': 'Resource request failed',
+      'source': source,
+      'httpStatus': 403,
+    });
+    await event({
+      'type': 'runtimeError',
+      'windowId': 701,
+      'category': 'javascript',
+      'message': 'No available adapters.',
+      'severity': 3,
+      'url': 'https://www.youtube.com/watch?v=fixture',
+      'source': 'https://www.youtube.com/watch?v=fixture',
+    });
+    await event({'type': 'gameWindowClosed', 'windowId': 701});
+    await drain();
+    final logs = await store.errorLogs();
+    expect(
+      jsonDecode(
+        logs.singleWhere((r) => r.type == 'compatibility').details!,
+      )['originalCategory'],
+      'graphics',
+    );
+    expect(await store.errorLogCount(type: 'errors'), 1);
+    expect(logs.where((r) => r.type == 'ad'), hasLength(1));
+    expect(logs.where((r) => r.type == 'network'), hasLength(1));
+    expect(
+      logs.singleWhere((r) => r.type == 'network').details,
+      contains('403'),
+    );
+  });
 
   test(
     'native handoff releases the OSR heap only after successful creation',

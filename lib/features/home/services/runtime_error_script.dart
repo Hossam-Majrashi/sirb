@@ -3,7 +3,18 @@
 const runtimeErrorTelemetry = r'''(() => {
   const debug=console.debug.bind(console);
   const text=(value,max=8192)=>{try{return String(value??'').slice(0,max);}catch(_){return '[unprintable]';}};
+  const reported=new WeakSet();
+  const expectedPlayback=reason=>
+    (reason?.name==='NotAllowedError' && reason.message==='Sirb requires player interaction before playback') ||
+    (reason?.name==='AbortError' && /^The play\(\) request was interrupted by (?:a call to pause\(\)|a new load request)/.test(reason.message??''));
   const error=(category,reason,extra={})=>{
+    // Expected policy denials and play/pause/load races are not decoder faults.
+    // Keep the rejection intact so the website's own catch still runs.
+    if(expectedPlayback(reason))return;
+    if(reason && (typeof reason==='object' || typeof reason==='function')){
+      if(reported.has(reason))return;
+      reported.add(reason);
+    }
     try{debug('__sirb__'+JSON.stringify({type:'runtimeError',category,
       message:text(reason?.message??reason,4096),details:text(reason?.stack),
       url:location.href,frameUrl:location.href,main:window===window.top,...extra}));}catch(_){}
@@ -12,7 +23,14 @@ const runtimeErrorTelemetry = r'''(() => {
     if(e instanceof ErrorEvent)error('javascript',e.error??e.message,{source:e.filename,line:e.lineno,column:e.colno});
     else if(e.target instanceof HTMLMediaElement)error('media',e.target.error?.message??'Media element failed',
       {source:e.target.currentSrc,code:e.target.error?.code});
-    else if(e.target?.src||e.target?.href)error('network','Document resource failed',{source:e.target.src||e.target.href});
+    else {
+      // Empty/missing src properties can resolve to the page URL, falsely
+      // labelling the document as the failed resource (e.g. a removed image).
+      const target=e.target;
+      const attribute=target?.getAttribute?.('src')||target?.getAttribute?.('href');
+      if(attribute?.trim())error('network','Document resource failed',
+        {source:target.currentSrc||target.src||target.href,resourceTag:target.tagName});
+    }
   },true);
   addEventListener('unhandledrejection',e=>error('javascript',e.reason,{operation:'unhandledrejection'}));
   document.addEventListener('webglcontextlost',e=>error('graphics',e.statusMessage||'WebGL context lost'),true);

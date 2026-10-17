@@ -69,13 +69,21 @@ void WebviewHandler::OnResourceLoadComplete(CefRefPtr<CefBrowser> browser,
   // On IO: do not modify browser/frame state. Normal aborts (navigation, close,
   // and ad cancellation) are not page failures. No headers/body are collected.
   if (!browser || status == UR_CANCELED) return;
-  const auto code = response->GetError();
-  const int http = response->GetStatus();
+  const auto code = response ? response->GetError() : ERR_FAILED;
+  const int http = response ? response->GetStatus() : 0;
   if (code == ERR_ABORTED || (status != UR_FAILED && http < 400)) return;
   auto event = CefDictionaryValue::Create(); event->SetString("type", "runtimeError");
   event->SetString("category", "network"); event->SetString("message", "Resource request failed");
   event->SetString("source", request->GetURL()); event->SetString("operation", request->GetMethod());
   event->SetInt("code", static_cast<int>(code)); event->SetInt("httpStatus", http);
+  event->SetInt("requestStatus", static_cast<int>(status));
+  event->SetDouble("receivedBytes", static_cast<double>(received_content_length));
+  // HTTP headers can succeed before the stream fails. Do not call this success,
+  // retry signed URLs, or assume every transport failure is an ad cancellation.
+  if (status == UR_FAILED && http >= 200 && http < 300) {
+    event->SetString("diagnostic", "responseBodyTransferFailed");
+    event->SetString("reason", "HTTP headers succeeded but resource transfer failed before successful completion.");
+  }
   sirbEvent(browser->GetIdentifier(), sirb_json(event));
 }
 void WebviewHandler::sirbControl(int browserId, std::string action, std::string value) {

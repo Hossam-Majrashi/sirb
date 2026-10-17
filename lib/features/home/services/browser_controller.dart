@@ -11,6 +11,8 @@ import '../../settings/services/preferences_service.dart';
 import '../../settings/models/search_engine.dart';
 import '../models/address_target.dart';
 import 'page_features.dart';
+import 'runtime_error_policy.dart';
+import 'runtime_diagnostic_router.dart';
 
 class BrowserController extends ChangeNotifier {
   BrowserController({
@@ -28,6 +30,9 @@ class BrowserController extends ChangeNotifier {
   final List<BrowserTab> tabs = [];
   final Map<String, BrowserTab> _preloads = {};
   final Map<String, Timer> _expiry = {};
+  late final _diagnostics = RuntimeDiagnosticRouter(
+    emit: (event, url) => _persistRuntimeError(event, fallbackUrl: url),
+  );
   final Set<String> _creating = {};
   int? gameWindowId;
   bool _openingGameWindow = false;
@@ -351,6 +356,7 @@ class BrowserController extends ChangeNotifier {
           changed();
         },
         onLoadStart: (_, url) {
+          _diagnostics.resetScope(tab.id);
           tab.loading = true;
           tab.loadError = null;
           tab.missingStreamCodecs = false;
@@ -381,13 +387,17 @@ class BrowserController extends ChangeNotifier {
           if (_closing) return;
           if (!message.startsWith('__sirb__')) {
             if (level >= 3 && level <= 5) {
-              _recordRuntimeError({
-                'category': 'javascript',
-                'message': message,
-                'source': source,
-                'line': line,
-                'severity': level,
-              }, fallbackUrl: tab.url);
+              _recordRuntimeError(
+                {
+                  'category': 'javascript',
+                  'message': message,
+                  'source': source,
+                  'line': line,
+                  'severity': level,
+                },
+                fallbackUrl: tab.url,
+                scope: tab.id,
+              );
             }
             return;
           }
@@ -475,8 +485,22 @@ class BrowserController extends ChangeNotifier {
     }
   }
 
-  void _recordRuntimeError(Map<String, dynamic> event, {String? fallbackUrl}) {
-    if (_closing || event['message'] is! String) return;
+  void _recordRuntimeError(
+    Map<String, dynamic> event, {
+    String? fallbackUrl,
+    String? scope,
+  }) {
+    if (_closing) return;
+    _diagnostics.record(
+      event,
+      scope:
+          scope ?? 'native:${event['windowId'] ?? gameWindowId ?? 'unknown'}',
+      fallbackUrl: fallbackUrl,
+    );
+  }
+
+  void _persistRuntimeError(Map<String, dynamic> event, {String? fallbackUrl}) {
+    if (event['message'] is! String) return;
     String bounded(String value, int max) =>
         value.length <= max ? value : value.substring(0, max);
     final message = bounded(event['message'] as String, 4096);
@@ -486,12 +510,18 @@ class BrowserController extends ChangeNotifier {
       'graphics',
       'media',
       'permission',
+      'performance',
+      'compatibility',
       'network',
       'crash',
     };
     final category = categories.contains(event['category'])
         ? event['category'] as String
         : 'javascript';
+    if ((category == 'javascript' || category == 'media') &&
+        isExpectedPlaybackDiagnostic(message)) {
+      return;
+    }
     final details = <String, Object>{};
     for (final key in [
       'operation',
@@ -502,6 +532,17 @@ class BrowserController extends ChangeNotifier {
       'code',
       'status',
       'httpStatus',
+      'requestStatus',
+      'receivedBytes',
+      'resource',
+      'advisory',
+      'originalCategory',
+      'coalescingWindowSeconds',
+      'resourceTag',
+      'diagnostic',
+      'recoverable',
+      'capabilityProbe',
+      'expectedProtection',
       'reason',
       'main',
       'frameUrl',
@@ -539,6 +580,7 @@ class BrowserController extends ChangeNotifier {
           changed();
         }
       case 'gameWindowClosed':
+        _diagnostics.resetScope('native:${event['windowId']}');
         if (gameWindowId == event['windowId']) {
           gameWindowId = null;
           changed();
@@ -556,6 +598,12 @@ class BrowserController extends ChangeNotifier {
         });
       case 'blocked':
       case 'adError':
+        if (event['type'] == 'blocked' && event['url'] is String) {
+          _diagnostics.blocked(
+            'native:${event['windowId'] ?? gameWindowId ?? 'unknown'}',
+            event['url'] as String,
+          );
+        }
         unawaited(
           store.recordErrorLog(
             type: 'ad',
@@ -580,7 +628,7 @@ class BrowserController extends ChangeNotifier {
     if (_closing) return;
     switch (event['type']) {
       case 'runtimeError':
-        _recordRuntimeError(event, fallbackUrl: tab.url);
+        _recordRuntimeError(event, fallbackUrl: tab.url, scope: tab.id);
         return;
       case 'loadError':
         tab.loadError = event['error'] as String;
@@ -614,6 +662,7 @@ class BrowserController extends ChangeNotifier {
       case 'blocked':
         tab.blocked++;
         final blockedUrl = event['url'] as String? ?? '';
+        _diagnostics.blocked(tab.id, blockedUrl);
         final pageUrl = (event['page'] as String?)?.isNotEmpty == true
             ? event['page'] as String
             : tab.url;
@@ -825,6 +874,7 @@ class BrowserController extends ChangeNotifier {
   Future<void> _discardPreload(String url) async {
     _expiry.remove(url)?.cancel();
     final tab = _preloads.remove(url);
+    if (tab != null) _diagnostics.resetScope(tab.id);
     await tab?.controller?.dispose();
   }
 
@@ -854,6 +904,7 @@ class BrowserController extends ChangeNotifier {
       return;
     }
     for (final tab in ordered) {
+      _diagnostics.resetScope(tab.id);
       tabs.remove(tab);
       await tab.controller?.dispose();
     }
@@ -963,12 +1014,13 @@ class BrowserController extends ChangeNotifier {
       jsonEncode({
         'speculative': speculative,
         'runtime':
-            "${flags}if(document.documentElement)document.documentElement.style.colorScheme=${jsonEncode(engine.colorScheme)};document.getElementById('sirb-cosmetic')?.remove();${enabled ? engine.blocker.documentScript : ''}",
+            "${flags}if(document.documentElement && document.documentElement.style.colorScheme!==${jsonEncode(engine.colorScheme)})document.documentElement.style.colorScheme=${jsonEncode(engine.colorScheme)};${enabled ? engine.blocker.documentScript : "document.getElementById('sirb-cosmetic')?.remove();"}",
       }),
     );
   }
 
   Future<void> reconfigure() async {
+    _diagnostics.reset();
     await engine.configure();
     await clearPreloads();
     for (final tab in tabs) {
@@ -977,6 +1029,7 @@ class BrowserController extends ChangeNotifier {
   }
 
   Future<void> shutdown() async {
+    _diagnostics.dispose();
     _closing = true;
     _timer?.cancel();
     await store.saveSession(tabs, activeId);
@@ -992,6 +1045,7 @@ class BrowserController extends ChangeNotifier {
   @override
   void dispose() {
     WebviewManager().onNativeEvent = null;
+    _diagnostics.dispose();
     _closing = true;
     _backgroundQueue.clear();
     _timer?.cancel();
