@@ -120,9 +120,11 @@ void main() {
     },
   );
 
-  test('diagnostic echoes are correlated without hiding real failures', () async {
+  test('search-page notices persist without hiding real failures', () async {
     await browser.initialize();
-    await browser.add(url: 'https://www.youtube.com/watch?v=fixture');
+    await browser.add(
+      url: 'https://www.youtube.com/results?search_query=fixture',
+    );
     await drain();
     final listener = browser.active!.controller!.listener!.onConsoleMessage!;
     void event(Map<String, Object?> value) =>

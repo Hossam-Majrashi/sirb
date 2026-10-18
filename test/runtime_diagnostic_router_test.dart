@@ -121,6 +121,114 @@ void main() {
     expect(records.every((r) => r['advisory'] == true), true);
   });
 
+  for (final path in [
+    '/',
+    '/watch?v=GEk5KlsEBcY',
+    '/results?search_query=zip+aes256',
+    '/shorts/0LmI-WNBsiY',
+    '/@SomeOrdinaryGamers',
+    '/@EsraaCodes/shorts',
+    '/@8ekko/shorts',
+    '/@fixture/videos',
+    '/@fixture/streams',
+    '/feed/subscriptions',
+  ]) {
+    test('known console notices on browsing route $path retain evidence', () {
+      final url = 'https://www.youtube.com$path';
+      for (final explicitUrl in [false, true]) {
+        router.record(
+          {
+            'category': 'javascript',
+            'message': 'No available adapters.',
+            'source': url,
+            'severity': 3,
+            if (explicitUrl) 'url': url,
+          },
+          scope: 'tab-1',
+          fallbackUrl: url,
+        );
+        router.record(
+          {
+            'category': 'javascript',
+            'message':
+                "Blocked script execution in 'about:blank' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.",
+            'source': 'https://www.youtube.com/s/_/ytmainappweb/_/js/module',
+            'severity': 4,
+            if (explicitUrl) 'url': url,
+          },
+          scope: 'tab-1',
+          fallbackUrl: url,
+        );
+      }
+      expect(records, hasLength(4));
+      expect(records.every((r) => r['category'] == 'compatibility'), true);
+      expect(records.every((r) => r['advisory'] == true), true);
+      expect(records[0]['source'], url);
+      expect(records[0]['severity'], 3);
+      expect(records[0]['originalCategory'], 'graphics');
+      expect(records[1]['severity'], 4);
+      expect(records[1]['originalCategory'], 'permission');
+    });
+  }
+
+  test(
+    'browsing notices do not downgrade transfer, HTTP or site JS faults',
+    () {
+      const url = 'https://www.youtube.com/results?search_query=zip+aes256';
+      for (final event in [
+        {
+          'category': 'network',
+          'message': 'Resource request failed',
+          'operation': 'POST',
+          'source': 'https://rr7.googlevideo.com/videoplayback?fixture=1',
+          'code': -2,
+          'httpStatus': 200,
+          'requestStatus': 4,
+          'receivedBytes': 130216.0,
+          'diagnostic': 'responseBodyTransferFailed',
+        },
+        {
+          'category': 'network',
+          'message': 'Resource request failed',
+          'source': 'https://www.youtube.com/oembed?fixture=1',
+          'httpStatus': 401,
+        },
+        {
+          'category': 'network',
+          'message': 'Resource request failed',
+          'source': 'https://i.ytimg.com/vi/fixture/hqdefault.jpg',
+          'httpStatus': 404,
+        },
+        {
+          'category': 'javascript',
+          'message': 'Eb',
+          'operation': 'unhandledrejection',
+          'details': 'Error: Eb',
+        },
+        {...resize(), 'url': url},
+      ]) {
+        router.record(event, scope: 'tab-1', fallbackUrl: url);
+      }
+      expect(records, hasLength(5));
+      expect(records.map((r) => r['category']), [
+        'network',
+        'network',
+        'network',
+        'javascript',
+        'javascript',
+      ]);
+      expect(records[0]['code'], -2);
+      expect(records[0]['httpStatus'], 200);
+      expect(records[0]['requestStatus'], 4);
+      expect(records[0]['receivedBytes'], 130216.0);
+      expect(records[0]['diagnostic'], 'responseBodyTransferFailed');
+      expect(records[1]['httpStatus'], 401);
+      expect(records[2]['httpStatus'], 404);
+      expect(records[3]['details'], 'Error: Eb');
+      expect(records[4]['diagnostic'], 'resizeObserverDeferredNotifications');
+    },
+  );
+
   test(
     'notice scope cannot downgrade unrelated sites, scripts or real failures',
     () {
@@ -192,6 +300,49 @@ void main() {
       expect(records.last['httpStatus'], 403);
     },
   );
+
+  test('browsing routes do not include games, APIs or unknown channel apps', () {
+    for (final path in [
+      '/playables',
+      '/playables/game-id',
+      '/gaming',
+      '/@fixture/playables',
+      '/@fixture/game',
+      '/@fixture/shorts/game',
+      '/shorts',
+      '/shorts/invalid',
+      '/shorts/0LmI-WNBsiY/game',
+      '/api/player',
+      '/s/_/ytmainappweb/_/js/module',
+      '/results/game',
+      '/feed/subscriptions/game',
+    ]) {
+      final url = 'https://www.youtube.com$path';
+      router.record(
+        {
+          'category': 'javascript',
+          'message': 'No available adapters.',
+          'source': url,
+          'severity': 3,
+        },
+        scope: 'tab-1',
+        fallbackUrl: url,
+      );
+      router.record(
+        {
+          'category': 'javascript',
+          'message':
+              "Blocked script execution in 'about:blank' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.",
+          'source': 'https://www.youtube.com/s/_/ytmainappweb/_/js/module',
+          'severity': 4,
+        },
+        scope: 'tab-1',
+        fallbackUrl: url,
+      );
+      expect(records[records.length - 2]['category'], 'graphics', reason: path);
+      expect(records.last['category'], 'permission', reason: path);
+    }
+  });
 
   test(
     'observer/console resize echo coalesces, real repeated loops remain',
