@@ -10,6 +10,12 @@ runs:
         ref: abaf9c523780a608bd46686fd5e53740a07077f8 # 3.47.7
         path: .ci/flutter
         persist-credentials: false
+    - name: Restore and verify Flutter release tag metadata
+      shell: bash
+      run: |
+        # A SHA-only shallow checkout reports SDK 0.0.0-unknown to pub.
+        git -C .ci/flutter fetch --depth=1 origin refs/tags/3.47.7:refs/tags/3.47.7
+        test "$(git -C .ci/flutter rev-parse '3.47.7^{commit}')" = abaf9c523780a608bd46686fd5e53740a07077f8
     - name: Add Flutter to PATH (Unix)
       if: runner.os != 'Windows'
       shell: bash

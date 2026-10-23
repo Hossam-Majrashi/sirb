@@ -1155,3 +1155,11 @@ is made until the new workflow actually completes. Existing local dist packages
 and the manually published v1.0.0 release remain the earlier builds, not new
 cross-platform CI outputs. Check the workflow run for actual native results.
 
+The first actual Actions run (`39890173532`) reached the native Flutter bootstrap
+but failed pub resolution: a shallow SHA-only Flutter checkout reported
+`0.0.0-unknown` despite the correct framework/engine revision. The bootstrap now
+fetches exactly the `3.47.7` release tag and verifies its peeled commit against
+the pinned SHA before invoking Flutter. This preserves SDK version metadata
+without trusting a movable tag or fetching the entire SDK history. Native jobs
+were skipped in that first run; it is not a successful build.
+
