@@ -38,6 +38,19 @@ void main() {
     }
   }
 
+  Future<void> waitForLogs(int count) async {
+    // Native callbacks enqueue SQLite writes behind session serialization.
+    // A fixed 150ms drain races cold/loaded CI workers; wait for persisted rows
+    // instead, still failing if the expected diagnostics never arrive.
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (await store.errorLogCount() < count) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw TimeoutException('Expected $count persisted native diagnostics');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
   setUp(() async {
     calls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -260,7 +273,7 @@ void main() {
         'url': 'https://example.com/native',
       });
       await event({'type': 'gameWindowClosed', 'windowId': 701});
-      await drain();
+      await waitForLogs(2);
       expect(browser.gameWindowId, null);
       final logs = await store.errorLogs();
       expect(logs.map((e) => e.type), containsAll(['graphics', 'crash']));
@@ -304,7 +317,7 @@ void main() {
       'source': 'https://www.youtube.com/watch?v=fixture',
     });
     await event({'type': 'gameWindowClosed', 'windowId': 701});
-    await drain();
+    await waitForLogs(3);
     final logs = await store.errorLogs();
     expect(
       jsonDecode(

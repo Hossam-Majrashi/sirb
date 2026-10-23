@@ -1195,3 +1195,12 @@ next native checks exposed three more portability issues, now addressed:
 These subsequent failures are retained as failures, not successful Windows/macOS
 packages. Check the latest run for the cold native retests.
 
+Run `39893036201` hit an existing test timing race before native jobs: 101 Flutter
+tests passed, but the native-window diagnostic test queried SQLite before its
+unawaited writes cleared the session queue. Its fixed 150ms sleep was sufficient
+on earlier runs/local host but not this cold worker. Native diagnostic assertions
+now wait (bounded to five seconds) for the required persisted row count, then
+perform the same category/payload assertions. No production diagnostics are
+suppressed and no assertion is skipped or relaxed. Both native-window store
+checks use this persistence condition instead of a fixed sleep.
+
