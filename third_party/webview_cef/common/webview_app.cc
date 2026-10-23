@@ -120,8 +120,8 @@ void WebviewApp::OnBeforeCommandLineProcessing(const CefString &process_type, Ce
         // adapter can turn a recoverable software fallback into a GPU crash.
         command_line->AppendSwitch("enable-gpu-rasterization");
     }
-    const char* extra = std::getenv("SIRB_CEF_SWITCHES");
-    if (extra) {
+    const auto extra = sirb_environment("SIRB_CEF_SWITCHES");
+    if (!extra.empty()) {
         std::istringstream stream(extra);
         std::string item;
         while (std::getline(stream, item, ';')) {
@@ -137,14 +137,14 @@ void WebviewApp::OnBeforeCommandLineProcessing(const CefString &process_type, Ce
     // between CEF and Flutter/other applications. Use the real X11 clipboard
     // when an X display is available (including XWayland). Preserve explicit
     // backend choices and never force an unavailable X11 on Wayland-only hosts.
-    const char* display = std::getenv("DISPLAY");
-    if (!command_line->HasSwitch("ozone-platform") && display && display[0]) {
+    const auto display = sirb_environment("DISPLAY");
+    if (!command_line->HasSwitch("ozone-platform") && !display.empty()) {
         command_line->AppendSwitchWithValue("ozone-platform", "x11");
     }
 #endif
 
-    const char* webgpu = std::getenv("SIRB_WEBGPU_ENABLED");
-    if (webgpu && std::string(webgpu) == "0") {
+    const auto webgpu = sirb_environment("SIRB_WEBGPU_ENABLED");
+    if (webgpu == "0") {
         // Let sites fall back to hardware WebGL without disabling the GPU.
         // Merge with developer switches instead of overwriting their features.
         std::string disabled = command_line->GetSwitchValue("disable-features");

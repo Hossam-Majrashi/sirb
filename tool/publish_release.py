@@ -57,9 +57,13 @@ Verify downloads using SHA256SUMS.txt. Install only one Windows package format.
 Linux armv7/i686 and Windows x86 are unsupported by this Flutter/CEF stack.
 Official CEF H.264/AAC decoder limitations remain unchanged. No universal ad-free guarantee.
 ''', encoding='utf-8')
-        gh('release', 'create', tag, '--repo', repo, '--target', commit, '--draft',
-           '--title', 'Sirb ' + ver, '--notes-file', str(notes))
-        release = api(f'repos/{repo}/releases/tags/{tag}')
+        # Use the POST response directly; draft lookup by tag can return 404.
+        release = json.loads(gh(
+            'api', '--method', 'POST', f'repos/{repo}/releases',
+            '-f', 'tag_name=' + tag, '-f', 'target_commitish=' + commit,
+            '-f', 'name=Sirb ' + ver, '-F', 'draft=true',
+            '-f', 'body=' + notes.read_text(encoding='utf-8'),
+        ))
     expected = {p.name: p for p in directory.iterdir() if p.is_file()}
     assets = api(release['assets_url'].replace('https://api.github.com/', '', 1))
     for asset in assets:

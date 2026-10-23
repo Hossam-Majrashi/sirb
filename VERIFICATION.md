@@ -1204,3 +1204,27 @@ perform the same category/payload assertions. No production diagnostics are
 suppressed and no assertion is skipped or relaxed. Both native-window store
 checks use this persistence condition instead of a fixed sleep.
 
+Run `39893467417` passed validation and **both Linux native jobs**: x86_64 and
+aarch64 each uploaded all seven requested supported formats (including genuine
+AppImage zsync metadata and Flatpak). Collection correctly skipped because the
+other targets failed. Windows got through extraction to the compiler but /WX
+rejected deprecated getenv calls and a shadowed mutex guard. Shared environment
+reads now use owned `_dupenv_s` copies on Windows (same launch flag semantics),
+and the guard was renamed; warning enforcement remains enabled. macOS standalone
+helpers linked, but the CocoaPod itself also needed the wrapper's NDEBUG setting;
+its evaluated target definitions now match all four supported CMake build types.
+The universal job separately hit a CDN partial-transfer error; CEF download now
+makes up to three fresh, TLS-verified attempts, deleting partial responses before
+retry, with unchanged checksum/staging/promotion protection. A new loopback-only
+503 regression verifies retry, while all previous failure/integrity tests remain.
+
+Latest local checks: Linux release rebuild **passed**, Flutter **102 passed**,
+release helpers **8 passed** (including fully mocked draft POST/upload/digest
+verification and refusal to replace published releases), CEF downloader **20
+passed**, actionlint/diff checks passed. Added a Ruby-only podspec ABI configuration
+fixture to CI (Ruby is not installed on the local host; native CI retest pending).
+Draft creation uses the POST response directly, not draft-by-tag lookup. Platform
+packages now explicitly include Sirb/CEF/plugin licenses. Markdown-only branch/PR
+changes skip expensive rebuilds; version tags still always trigger release jobs.
+No Windows/macOS packaging success is claimed until the next actual native run.
+

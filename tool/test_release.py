@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """Hermetic release regressions; does not pretend to compile other platforms."""
+import contextlib
+import io
+import json
 import os
 from pathlib import Path
 import struct
@@ -11,6 +14,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 import release
+import publish_release
 
 
 def pe(path, machine):
@@ -107,6 +111,68 @@ class ReleaseTests(unittest.TestCase):
             wrong = 'arm64' if arch == 'x64' else 'x64'
             with self.assertRaises(ValueError):
                 release.windows_sources(bundle, wrong, work, output)
+
+    def test_publisher_uses_draft_post_response_and_verifies_all_assets(self):
+        directory = self.root/'dist'
+        directory.mkdir()
+        for name in release.names():
+            (directory/name).write_text(name)
+        commit = 'a'*40
+        calls, assets = [], []
+        draft = {'id': 7, 'draft': True, 'assets_url': 'https://api.github.com/repos/example/sirb/releases/7/assets'}
+
+        def gh(*args):
+            calls.append(args)
+            if args[0] == 'api' and '/commits/' in args[1]:
+                return json.dumps({'sha': commit})
+            if args[:3] == ('api', '--method', 'POST') and args[3].endswith('/releases'):
+                return json.dumps(draft)
+            return '{}'
+
+        def api(path):
+            if 'matching-refs/' in path or path.endswith('releases?per_page=100'):
+                return []
+            if path.endswith('/assets'):
+                return list(assets)
+            if path.endswith('/releases/7'):
+                return {**draft, 'assets': list(assets)}
+            self.fail('Unexpected API path: '+path)
+
+        def upload(args, **kwargs):
+            self.assertEqual(args[:3], ['gh', 'release', 'upload'])
+            path = Path(args[4])
+            assets.append({'name': path.name, 'state': 'uploaded', 'size': path.stat().st_size,
+                           'digest': 'sha256:'+release.digest(path)})
+
+        env = {'GITHUB_ACTIONS': 'true', 'GH_TOKEN': 'test-only', 'GITHUB_REPOSITORY': 'example/sirb',
+               'GITHUB_SHA': commit, 'RUNNER_TEMP': str(self.root)}
+        with contextlib.chdir(self.root), patch.dict(os.environ, env), \
+                patch.object(publish_release, 'gh', side_effect=gh), \
+                patch.object(publish_release, 'api', side_effect=api), \
+                patch.object(publish_release.subprocess, 'run', side_effect=upload), \
+                contextlib.redirect_stdout(io.StringIO()):
+            publish_release.main()
+        self.assertEqual(len(assets), 24)
+        self.assertFalse(any('/releases/tags/' in str(call) for call in calls))
+        self.assertTrue(any('draft=false' in call for call in calls))
+
+    def test_publisher_never_replaces_a_published_release(self):
+        directory = self.root/'dist'
+        directory.mkdir()
+        for name in release.names():
+            (directory/name).write_text(name)
+        commit = 'a'*40
+        tag = 'v'+release.version()
+        responses = [[{'ref': 'refs/tags/'+tag, 'object': {'type': 'commit', 'sha': commit}}],
+                     [{'tag_name': tag, 'draft': False}]]
+        env = {'GITHUB_ACTIONS': 'true', 'GH_TOKEN': 'test-only', 'GITHUB_REPOSITORY': 'example/sirb', 'GITHUB_SHA': commit}
+        with contextlib.chdir(self.root), patch.dict(os.environ, env), \
+                patch.object(publish_release, 'gh', return_value=json.dumps({'sha': commit})) as gh, \
+                patch.object(publish_release, 'api', side_effect=responses), \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(SystemExit, 'already published'):
+                publish_release.main()
+        self.assertEqual(gh.call_count, 1, 'only read commit metadata; do not modify published assets')
 
     def test_version_and_tag_validation_before_build_or_publish(self):
         (self.root / 'pubspec.yaml').write_text('version: 1.2.3+4\n')

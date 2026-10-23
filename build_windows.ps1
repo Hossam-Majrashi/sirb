@@ -20,6 +20,7 @@ if (-not $vs) { throw 'Visual Studio C++ installation not found' }
 $redist = Get-ChildItem "$vs\VC\Redist\MSVC\*\$Arch\Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $redist) { throw "Missing redistributable app-local $Arch MSVC CRT" }
 Copy-Item "$($redist.FullName)\*.dll" $bundle -Force
+Copy-Item LICENSE "$bundle/Sirb-LICENSE" -Force
 Run-Checked python @('tool/release.py','binary','windows',$Arch,"$bundle/vcruntime140.dll")
 New-Item -ItemType Directory -Force dist | Out-Null
 Run-Checked python @('tool/release.py','windows','--arch',$Arch,'--bundle',$bundle)

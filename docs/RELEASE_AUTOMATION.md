@@ -4,7 +4,7 @@ Workflow: [Build desktop packages](../.github/workflows/build.yml).
 
 ## Build and download
 
-- Push to `main` or open a pull request: validate, build native packages, upload
+- Push to `main` or open a pull request (except Markdown-only changes): validate, build native packages, upload
   per-target Actions artifacts. Download them under **Actions → workflow run →
   Artifacts**. Artifacts expire after **5 days**.
 - **Actions → Build desktop packages → Run workflow** builds the selected ref.
@@ -126,7 +126,13 @@ Authenticode integration are not implemented by this change.
   `python3 tool/release.py checksums dist`.
 - Verify downloads in their directory: `sha256sum -c SHA256SUMS.txt`.
 - Hermetic helper tests:
-  `python3 -m unittest discover -s tool -p test_release.py -v`.
+  `python3 -m unittest discover -s tool -p test_release.py -v` (eight tests,
+  including mocked draft publishing and immutable published-release protection).
+- CEF staging/integrity regressions: `python3 tool/test_cef_download.py` (20 tests;
+  transient transfer retry uses only a loopback fixture server).
+- CocoaPod/wrapper NDEBUG ABI flag checks: `ruby tool/test_cef_macos_config.rb`
+  (Ruby required; no CocoaPods/macOS needed). This evaluates the podspec DSL with
+  a test harness; it is not a native link/runtime test.
 
 `tool/ci_linux_setup.sh` is explicitly for disposable GitHub runners. It enables
 user namespaces for Flatpak's builder where Ubuntu AppArmor's runner policy

@@ -307,7 +307,7 @@ namespace webview_cef {
     void WebviewPlugin::HandleMethodCall(std::string name, WValue* values, std::function<void(int ,WValue*)> result) {
         std::unique_lock<std::recursive_mutex> lock(m_renderersMutex);
         if (name == "sirbConfigure") {
-            std::lock_guard<std::mutex> lock(sirb_config.mutex);
+            std::lock_guard<std::mutex> config_lock(sirb_config.mutex);
             auto stringField = [&](const char* key) {
                 const char* s = webview_value_get_string(webview_value_get_by_string(values, key));
                 return s ? std::string(s) : std::string();

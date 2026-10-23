@@ -30,6 +30,10 @@ bash third_party/webview_cef/macos/scripts/download_cef.sh
 flutter build macos --release
 app="$PWD/build/macos/Build/Products/Release/Sirb.app"
 [[ -d "$app" ]] || { echo 'Missing Sirb.app' >&2; exit 1; }
+mkdir -p "$app/Contents/Resources/licenses"
+cp LICENSE "$app/Contents/Resources/licenses/Sirb-LICENSE"
+cp third_party/webview_cef/LICENSE "$app/Contents/Resources/licenses/webview_cef-LICENSE"
+cp third_party/webview_cef/macos/third/cef/LICENSE.txt "$app/Contents/Resources/licenses/CEF-LICENSE.txt"
 export SIRB_MACOS_APP="$app" SIRB_MACOS_ARCH="$arch"
 python3 - <<'PY'
 import os, pathlib, subprocess

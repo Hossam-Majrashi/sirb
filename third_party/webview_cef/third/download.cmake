@@ -62,13 +62,22 @@ endfunction()
 
 function(download_file url filename)
     message(STATUS "Downloading CEF from ${url}")
-    file(DOWNLOAD "${url}" "${filename}" STATUS download_status SHOW_PROGRESS
-        TLS_VERIFY ON TIMEOUT 1800 INACTIVITY_TIMEOUT 60)
-    list(GET download_status 0 download_code)
-    if(NOT download_code EQUAL 0)
+    foreach(attempt RANGE 1 3)
+        file(DOWNLOAD "${url}" "${filename}" STATUS download_status SHOW_PROGRESS
+            TLS_VERIFY ON TIMEOUT 1800 INACTIVITY_TIMEOUT 60)
+        list(GET download_status 0 download_code)
+        if(download_code EQUAL 0)
+            return()
+        endif()
+        # Never extract/resume a partial response. A fresh bounded retry handles
+        # transient CDN transfer errors; normal checksum/inventory checks follow.
         file(REMOVE "${filename}")
-        message(FATAL_ERROR "CEF download failed: ${download_status}. Re-run the build to retry.")
-    endif()
+        if(attempt LESS 3)
+            message(STATUS "CEF transfer attempt ${attempt} failed; retrying: ${download_status}")
+            execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep 2)
+        endif()
+    endforeach()
+    message(FATAL_ERROR "CEF download failed after 3 attempts: ${download_status}. Re-run the build to retry.")
 endfunction()
 
 function(prepare_prebuilt_files filepath)

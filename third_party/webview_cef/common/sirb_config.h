@@ -31,9 +31,21 @@ struct SirbConfig {
   std::vector<std::regex> patterns;
 };
 inline SirbConfig sirb_config;
+inline std::string sirb_environment(const char* name) {
+#ifdef _WIN32
+  char* buffer = nullptr;
+  std::size_t length = 0;
+  if (_dupenv_s(&buffer, &length, name) != 0) return {};
+  std::string value = buffer ? buffer : "";
+  std::free(buffer);
+  return value;
+#else
+  const char* value = std::getenv(name);
+  return value ? value : "";
+#endif
+}
 inline bool sirb_gpu_enabled() {
-  const char* value = std::getenv("SIRB_GPU_ACCELERATION");
-  return !value || std::string(value) != "0";
+  return sirb_environment("SIRB_GPU_ACCELERATION") != "0";
 }
 inline std::string sirb_host(const std::string& url) {
   CefURLParts parts;

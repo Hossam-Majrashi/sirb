@@ -5,12 +5,14 @@ Run: python3 tool/test_cef_download.py
 Tests Windows/Linux cache preparation and raw per-platform source validation.
 """
 import hashlib
+import http.server
 import os
 import pathlib
 import shutil
 import subprocess
 import tarfile
 import tempfile
+import threading
 import unittest
 
 
@@ -159,6 +161,41 @@ prepare_prebuilt_files("{self.dest}")
         self.run_prepare()
         self.assertEqual((self.dest/'version.txt').read_text(), self.package)
         self.assertFalse((self.dest/'old-cache-sentinel').exists())
+
+    def test_transient_transfer_retries_fresh_then_validates(self):
+        archive = self.archive.read_bytes()
+        checksum = hashlib.sha1(archive).hexdigest().encode()
+        attempts = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_GET(self):
+                if self.path.endswith('.sha1'):
+                    body = checksum
+                else:
+                    attempts.append(self.path)
+                    if len(attempts) == 1:
+                        self.send_response(503)
+                        self.send_header('Content-Length', '0')
+                        self.end_headers()
+                        return
+                    body = archive
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        output = self.run_prepare(url=f'http://127.0.0.1:{server.server_port}/distribution.tar.bz2')
+        self.assertEqual(len(attempts), 2)
+        self.assertIn('retrying', output)
+        self.assertTrue((self.dest/'version.txt').exists())
+        self.assertTrue((self.dest/'libcef_dll/base/cef_atomic_flag.cc').exists())
 
     def test_failed_download_preserves_old_cache(self):
         self.cached('old-version')
