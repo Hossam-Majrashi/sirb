@@ -1257,3 +1257,12 @@ vendor repositories, APT signature/TLS checks and app sandbox policy are unchang
 The bootstrap refuses non-GitHub hosts. Native/merged artifacts now expire after
 one day to limit multi-GB Actions storage; public releases are separate.
 
+Run `39901498319` confirmed the new APT setup proceeds within budget and all
+three macOS targets passed again. Omitting recommended packages exposed that
+Ubuntu lists Flatpak's required `eu-strip`/`eu-elfcompress` as recommended rather
+than hard dependencies: ARM64 reached actual Flatpak packaging, then failed on
+missing `eu-strip`. Added explicit `elfutils`, `desktop-file-utils` and `optipng`
+packaging tools instead of reinstalling FFmpeg/desktop portal recommendations or
+skipping strip/debug-symbol processing. Full same-commit collection is pending
+one final native rerun after this dependency correction.
+

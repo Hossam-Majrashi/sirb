@@ -5,7 +5,7 @@ set -euo pipefail
 bash "$(dirname "$0")/ci_apt_setup.sh"
 sudo apt-get install -y --no-install-recommends clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
   libxi-dev libgl1-mesa-dev libglu1-mesa-dev llvm ruby-dev rpm zstd zsync \
-  squashfs-tools flatpak flatpak-builder dbus-x11 python3
+  squashfs-tools flatpak flatpak-builder elfutils desktop-file-utils optipng dbus-x11 python3
 sudo gem install fpm -v 1.17.0 --no-document
 # Ubuntu 24.04's runner-wide AppArmor userns restriction can block builder's
 # bubblewrap. This changes ONLY the ephemeral CI host, never the shipped app.
