@@ -39,6 +39,8 @@ coverage/
 # حزم التوزيع وذاكرة Flatpak المؤقتة — Distribution packages and Flatpak cache
 /dist/
 /.flatpak-builder/
+# Pinned CI SDK checkout (never vendor the Flutter SDK)
+/.ci/
 
 # توزيعات CEF المُنزّلة؛ احتفظ بمصدر النسخة المعدّلة — Downloaded CEF; keep fork sources
 /third_party/webview_cef/third/cef/

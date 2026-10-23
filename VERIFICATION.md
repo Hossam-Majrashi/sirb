@@ -1105,3 +1105,53 @@ logged-out sample cannot prove that every ad or anti-adblock warning is removed,
 nor Brave-equivalent protection. Existing H.264/AAC limitations are unchanged.
 Python compilation, `git diff --check` and the sole desktop target check passed.
 
+## GitHub Actions native build and release pipeline
+
+Added `.github/workflows/build.yml` and a commit-pinned native Flutter bootstrap.
+Main/PR/manual runs build native Linux x86_64/aarch64, Windows x64/arm64 and
+macOS Intel/ARM64/universal packages. Tagged or explicitly requested releases
+require a matching pubspec version, immutable source/tag identity, every native
+job and the exact 23-package inventory. Linux names now match the requested
+`-linux-<arch>` convention and add AppImage zsync metadata; Windows generates
+MSI/setup EXE/portable ZIP; macOS checks/thins all Mach-O payloads and creates DMGs.
+The merged release has `SHA256SUMS.txt`. Old/stale/empty/wrong-architecture outputs
+are rejected. GitHub asset sizes/digests are checked before a draft is published.
+Published releases/tags are never silently overwritten or retargeted.
+
+Security/scope:
+- No PAT or certificate is committed. Only the collector has contents-write
+  permission, using `github.token`. Actions and Flutter source are commit pinned;
+  AppImage tool/runtime downloads have pinned versions and SHA-256 digests.
+- Native ARM Dart bootstrap URLs were checked successfully (HTTP 200 for pinned
+  engine's Linux/Windows ARM64 SDKs). No official Linux/Windows ARM64 release SDK
+  archive exists for Flutter 3.47.7, so the workflow bootstraps its pinned source
+  instead. Windows uses batch/PowerShell, not the x64-only MINGW bootstrap. The
+  obsolete Windows `--target-platform` option was removed: native Dart ABI and
+  PE header validation determine the actual target.
+- macOS public releases require the six documented Developer ID/notarization
+  secrets, nested signing, app/DMG notarization and stapling. Non-publish CI DMGs
+  are ad-hoc development artifacts only. Windows installers remain unsigned.
+  No platform security bypass or fabricated signing success is added.
+- Linux armv7/i686 and Windows x86 are unsupported; there are no fake builds.
+- `docs/RELEASE_AUTOMATION.md` explains downloads, signing setup, new version/tag
+  publication, retention, local commands and limitations. Existing v1.0.0 assets
+  are not replaced. Desktop remains the only targeted screen; this is build-only
+  work with no UI changes.
+
+Local verification:
+- `flutter analyze`: **no issues**; `flutter test`: **102 passed**.
+- `cd third_party/webview_cef && flutter test`: **4 passed**.
+- `python3 tool/test_cef_download.py`: **18 passed**.
+- `python3 -m unittest discover -s tool -p test_release.py -v`: **6 passed**,
+  covering exact names/inventory, checksum completeness/order, stale/empty files,
+  wrong ELF/PE architectures, both Windows installer manifests/portable payloads,
+  stable GUIDs/XML escaping, unsafe versions and mismatching tags.
+- `actionlint 1.7.11` (verified published SHA-256): **passed** workflow validation.
+- Bash syntax checks, Python compilation and `git diff --check`: **passed**.
+
+These local tests do not compile Windows/macOS or certify native installers,
+notarization or ARM runtime behavior. No claim of a successful remote CI build
+is made until the new workflow actually completes. Existing local dist packages
+and the manually published v1.0.0 release remain the earlier builds, not new
+cross-platform CI outputs. Check the workflow run for actual native results.
+

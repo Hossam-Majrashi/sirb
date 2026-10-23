@@ -1,20 +1,25 @@
+param([ValidateSet('x64','arm64')][string]$Arch = '')
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
-if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) { throw 'Flutter SDK and Visual Studio Desktop C++ workload are required.' }
-function Run-Flutter { & flutter @args; if ($LASTEXITCODE -ne 0) { throw "flutter $args failed" } }
-Run-Flutter pub get
-Run-Flutter gen-l10n
-Run-Flutter analyze
-Run-Flutter test
-New-Item -ItemType Directory -Force dist | Out-Null
-foreach ($arch in @('x64','arm64')) {
-  $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-  $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.ARM64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
-  if (-not (Test-Path $vswhere)) { throw 'Visual Studio Installer vswhere.exe is required to verify installed C++ toolchains.' }
-  $toolchain = & $vswhere -latest -products '*' -requires $component -property installationPath
-  if (-not $toolchain) { Write-Warning "Skipping $arch: install Visual Studio component $component, then run flutter build windows --release --target-platform windows-$arch. No output is fabricated."; continue }
-  & flutter build windows --release --target-platform "windows-$arch"
-  if ($LASTEXITCODE -ne 0) { throw "Windows $arch build failed; install the matching MSVC C++ toolchain." }
-  Compress-Archive -Path "build/windows/$arch/runner/Release/*" -DestinationPath "dist/Sirb-windows-$arch.zip" -Force
+if (-not $Arch) { $Arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'x64' } }
+function Run-Checked([string]$Command, [string[]]$Arguments) {
+  & $Command @Arguments
+  if ($LASTEXITCODE -ne 0) { throw "$Command failed with exit code $LASTEXITCODE" }
 }
-Write-Output 'macOS requires Xcode/CocoaPods on macOS. Linux requires a Linux host. ARMv7 and x86-32 desktop are unsupported by Flutter.'
+# Flutter 3.47 chooses Windows architecture from the Dart host ABI. Its Windows
+# command has NO --target-platform option. Never rename an x64 payload to ARM64.
+$dartVersion = (& dart --version 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0 -or $dartVersion -notmatch "windows_$Arch") { throw "Need native Windows $Arch Dart/Flutter SDK; got $dartVersion" }
+Run-Checked flutter @('pub','get')
+Run-Checked flutter @('gen-l10n')
+Run-Checked flutter @('build','windows','--release')
+$bundle = "build/windows/$Arch/runner/Release"
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$vs = & $vswhere -latest -products '*' -property installationPath
+if (-not $vs) { throw 'Visual Studio C++ installation not found' }
+$redist = Get-ChildItem "$vs\VC\Redist\MSVC\*\$Arch\Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
+if (-not $redist) { throw "Missing redistributable app-local $Arch MSVC CRT" }
+Copy-Item "$($redist.FullName)\*.dll" $bundle -Force
+Run-Checked python @('tool/release.py','binary','windows',$Arch,"$bundle/vcruntime140.dll")
+New-Item -ItemType Directory -Force dist | Out-Null
+Run-Checked python @('tool/release.py','windows','--arch',$Arch,'--bundle',$bundle)

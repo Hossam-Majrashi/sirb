@@ -9,13 +9,25 @@ Common: Flutter >=3.47 (installed here: 3.47.7, Dart 3.13.5), network for pub.de
 | Target | Supported architectures | Complete command | Build host |
 |---|---|---|---|
 | Linux | x64 / Arm64 | `flutter build linux --release --target-platform linux-x64` / `flutter build linux --release --target-platform linux-arm64`; `./build_linux.sh` | Matching Linux host; clang/C++20, CMake, ninja, pkg-config, GTK3/Xi/OpenGL development libraries |
-| Flatpak | x86_64 / aarch64 | `./flatpak_linux.sh`; `flatpak install --user dist/com.h.sirb-x86_64.flatpak` | Matching Linux host, flatpak-builder, Flathub org.freedesktop.Platform/Sdk 25.08 and Electron2.BaseApp 25.08 (Zypak) |
-| Windows | x64 / Arm64 | `powershell -ExecutionPolicy Bypass -File build_windows.ps1`; individually `flutter build windows --release --target-platform windows-x64` / `windows-arm64` | Windows 10+, Visual Studio 2022 Desktop development with C++, matching MSVC ARM64 tools, CMake, Windows SDK |
+| Flatpak | x86_64 / aarch64 | `./flatpak_linux.sh`; `flatpak install --user dist/sirb-<version>-linux-x86_64.flatpak` | Matching Linux host, flatpak-builder, Flathub org.freedesktop.Platform/Sdk 25.08 and Electron2.BaseApp 25.08 (Zypak) |
+| Windows | x64 / Arm64 | `./build_windows.ps1 -Arch x64` / `-Arch arm64` on matching native Flutter/Dart hosts; individually `flutter build windows --release` | Windows 10+, Visual Studio 2022 Desktop development with C++, matching MSVC ARM64 tools, CMake, Windows SDK |
 | macOS | x64 / Arm64 universal | `cd macos; WEBVIEW_CEF_MACOS_ARCH=universal CEF_WRAPPER_BUILD_TYPE=Release pod install; cd ..; WEBVIEW_CEF_MACOS_ARCH=universal CEF_WRAPPER_BUILD_TYPE=Release flutter build macos --release`; `./build_desktop.sh` | macOS >=12, Xcode command-line tools, CMake/ninja, CocoaPods; sign CEF helpers/frameworks before notarization |
 
 No desktop ARMv7 or x86-32 outputs: unsupported by official Flutter. Android/iOS/web are not targets. Linux x64 cannot build macOS/Windows or produce native Arm64 Flutter bundles without a matching host or properly configured sysroot/toolchain; scripts explicitly report this rather than manufacturing artifacts. Prebuilt Arm64 bundles can be copied into build/linux/arm64/release/bundle for packaging on x64.
 
-Linux packaging needs fpm, rpmbuild, dpkg-deb, tar, zstd and appimagetool. `./build_linux.sh` produces .rpm, .deb, .pkg.tar.zst, .tar.gz and AppImage for each available supported architecture. Debian/RPM dependency names are native to their package families; Arch metadata lists its own dependency names. The portable payload includes CEF, Flutter, desktop launcher and icon; GTK3/NSS/audio/OpenGL system libraries remain runtime dependencies. Use a compatible GTK3 distribution or Flatpak for a fixed userspace.
+Linux packaging needs Python 3.11+, fpm, rpmbuild, dpkg-deb, tar, zstd, appimagetool and zsyncmake. `./build_linux.sh` produces .rpm, .deb, .pkg.tar.zst, .tar.gz and AppImage for each available supported architecture. Debian/RPM dependency names are native to their package families; Arch metadata lists its own dependency names. The portable payload includes CEF, Flutter, desktop launcher and icon; GTK3/NSS/audio/OpenGL system libraries remain runtime dependencies. Use a compatible GTK3 distribution or Flatpak for a fixed userspace.
+
+## GitHub Actions
+
+[Build desktop packages](.github/workflows/build.yml) builds the supported native
+architectures on every main push/PR and by manual dispatch. Version tags publish
+a complete release only after all jobs, checksum checks and required macOS
+signing/notarization succeed. Names use `sirb-<version>-<system>-<arch>`;
+`SHA256SUMS.txt` covers the exact 23-artifact inventory. Windows produces MSI,
+setup EXE and portable ZIP; macOS produces Intel/ARM64/universal DMGs. Linux adds
+AppImage `.zsync` metadata. Unsupported 32-bit architectures are not fabricated.
+Setup, credentials, unsigned development-build limitations, download locations
+and safe version/tag publication: [release automation](docs/RELEASE_AUTOMATION.md).
 
 ## CEF cache recovery
 

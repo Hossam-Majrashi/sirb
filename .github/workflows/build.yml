@@ -1,0 +1,219 @@
+name: Build desktop packages
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a NEW pubspec version as a GitHub Release (requires macOS signing secrets)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && inputs.publish != true }}
+
+env:
+  CI: 'true'
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      publish: ${{ steps.metadata.outputs.publish }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Validate version/tag and release intent
+        id: metadata
+        env:
+          PUBLISH_RELEASE: ${{ inputs.publish || false }}
+        run: python tool/release.py metadata --github-output "$GITHUB_OUTPUT"
+      - name: Install test toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - uses: ./.github/actions/flutter
+      - name: Analyze and test shared desktop code
+        run: |
+          flutter analyze
+          flutter test
+          (cd third_party/webview_cef && flutter test)
+          python -m unittest discover -s tool -p test_release.py -v
+          python tool/test_cef_download.py
+          bash -n build_linux.sh flatpak_linux.sh tool/ci_linux_setup.sh tool/package_macos.sh
+
+  linux:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            flutter_arch: x64
+            asset_arch: x86_64
+          - runner: ubuntu-24.04-arm
+            flutter_arch: arm64
+            asset_arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      SIRB_LINUX_ARCH: ${{ matrix.flutter_arch }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Native packaging toolchain
+        run: bash tool/ci_linux_setup.sh
+      - uses: ./.github/actions/flutter
+      - name: Build native Linux packages and update metadata
+        run: bash build_linux.sh
+      - name: Reclaim generated staging copies before Flatpak SDK installation
+        run: rm -rf build/package-* build/pacman-* build/Sirb-*.AppDir
+      - name: Package the same native bundle in Flatpak
+        env:
+          SIRB_SKIP_BUILD: '1'
+        run: dbus-run-session -- bash flatpak_linux.sh
+      - name: Require every Linux format
+        env:
+          ASSET_ARCH: ${{ matrix.asset_arch }}
+        run: python tool/release.py checksums dist --system linux --arch "$ASSET_ARCH"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages-linux-${{ matrix.asset_arch }}
+          path: |
+            dist/*
+            !dist/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 5
+
+  windows:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/flutter
+      - name: Install WiX and locate native-runner Inno Setup
+        shell: pwsh
+        run: ./tool/ci_windows_setup.ps1
+      - name: Build native bundle, MSI, setup EXE and portable ZIP
+        shell: pwsh
+        env:
+          SIRB_WINDOWS_ARCH: ${{ matrix.arch }}
+        run: ./build_windows.ps1 -Arch $env:SIRB_WINDOWS_ARCH
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages-windows-${{ matrix.arch }}
+          path: |
+            dist/*
+            !dist/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 5
+
+  macos:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, arm64, universal]
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      SIRB_MACOS_ARCH: ${{ matrix.arch }}
+      SIRB_RELEASE_SIGN: ${{ needs.validate.outputs.publish == 'true' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/flutter
+      - name: Install CEF build tools
+        run: |
+          command -v cmake || brew install cmake
+          command -v ninja || brew install ninja
+          command -v pod || brew install cocoapods
+      - name: Build and package (sign and notarize public releases)
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+        run: bash tool/package_macos.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages-macos-${{ matrix.arch }}
+          path: dist/*.dmg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 5
+
+  collect:
+    needs: [validate, linux, windows, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: dist
+      - name: Validate complete inventory and create unified SHA256SUMS.txt
+        run: python tool/release.py checksums dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sirb-complete-${{ needs.validate.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 5
+      - name: Publish only complete, verified releases
+        if: needs.validate.outputs.publish == 'true' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tool/publish_release.py

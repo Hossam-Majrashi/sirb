@@ -53,7 +53,7 @@ flutter run -d windows
 flutter run -d macos
 ```
 
-راجع [ملاحظات البناء والتشغيل](BUILD_NOTES.md) لمعرفة المتطلبات التفصيلية، وإعداد CocoaPods على macOS، والمعماريات المدعومة، وإنشاء حزم التوزيع. تُحفظ الحزم الناتجة في `dist/` ولا تُضاف إلى Git.
+راجع [ملاحظات البناء والتشغيل](BUILD_NOTES.md) لمعرفة المتطلبات التفصيلية، وإعداد CocoaPods على macOS، والمعماريات المدعومة، وإنشاء حزم التوزيع. تُحفظ الحزم الناتجة في `dist/` ولا تُضاف إلى Git. للبناء التلقائي وحزم Actions ونشر الإصدارات، راجع [إعداد GitHub Actions](docs/RELEASE_AUTOMATION.md).
 
 ### ملاحظات مهمة
 
@@ -132,7 +132,7 @@ flutter run -d windows
 flutter run -d macos
 ```
 
-See [build and runtime notes](BUILD_NOTES.md) for full prerequisites, macOS CocoaPods setup, supported architectures, and packaging instructions. Distribution packages are written to `dist/` and excluded from Git.
+See [build and runtime notes](BUILD_NOTES.md) for full prerequisites, macOS CocoaPods setup, supported architectures, and packaging instructions. Distribution packages are written to `dist/` and excluded from Git. See [GitHub Actions release automation](docs/RELEASE_AUTOMATION.md) for native build artifacts, package names, signing requirements and tagged releases.
 
 ### Important notes
 

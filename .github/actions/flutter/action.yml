@@ -1,0 +1,38 @@
+name: Pinned native Flutter SDK
+description: Bootstrap Flutter 3.47.7 from source, including native ARM64 Dart.
+runs:
+  using: composite
+  steps:
+    - name: Check out pinned Flutter source
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      with:
+        repository: flutter/flutter
+        ref: abaf9c523780a608bd46686fd5e53740a07077f8 # 3.47.7
+        path: .ci/flutter
+        persist-credentials: false
+    - name: Add Flutter to PATH (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: echo "$GITHUB_WORKSPACE/.ci/flutter/bin" >> "$GITHUB_PATH"
+    - name: Add Flutter to PATH (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: Join-Path $env:GITHUB_WORKSPACE '.ci/flutter/bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+    - name: Bootstrap native SDK and localizations (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        flutter --version
+        flutter pub get
+        flutter gen-l10n
+    - name: Bootstrap native SDK and localizations (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        # Use the batch/PowerShell bootstrap: the MINGW shell SDK path is x64-only.
+        & flutter.bat --version
+        if ($LASTEXITCODE -ne 0) { throw 'Flutter bootstrap failed' }
+        & flutter.bat pub get
+        if ($LASTEXITCODE -ne 0) { throw 'Pub get failed' }
+        & flutter.bat gen-l10n
+        if ($LASTEXITCODE -ne 0) { throw 'Localization generation failed' }
