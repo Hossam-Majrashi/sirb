@@ -2,8 +2,8 @@
 # Native x86_64/aarch64 GitHub Linux runner prerequisites (not an app installer).
 set -euo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true ]] || { echo 'Run only on a GitHub Actions runner' >&2; exit 1; }
-sudo apt-get update
-sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+bash "$(dirname "$0")/ci_apt_setup.sh"
+sudo apt-get install -y --no-install-recommends clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
   libxi-dev libgl1-mesa-dev libglu1-mesa-dev llvm ruby-dev rpm zstd zsync \
   squashfs-tools flatpak flatpak-builder dbus-x11 python3
 sudo gem install fpm -v 1.17.0 --no-document

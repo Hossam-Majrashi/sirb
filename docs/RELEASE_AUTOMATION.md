@@ -140,7 +140,11 @@ Authenticode integration are not implemented by this change.
   spaced framework name and all unrelated linker flags (never clear all flags
   or rename the framework, which would break dyld/plugin dependencies).
 
-`tool/ci_linux_setup.sh` is explicitly for disposable GitHub runners. It enables
+`tool/ci_apt_setup.sh` and `tool/ci_linux_setup.sh` are explicitly for disposable
+GitHub runners. The APT bootstrap switches Azure's slow HTTP Ubuntu mirror to the
+same signed official HTTPS archive, sets bounded retries/timeouts and avoids
+unrelated recommended packages; normal signature/TLS verification remains enabled.
+The Linux setup enables
 user namespaces for Flatpak's builder where Ubuntu AppArmor's runner policy
 blocks bubblewrap. It does not modify the installed application or remove its
 Chromium sandbox. Actual native CI build results must be checked in Actions;

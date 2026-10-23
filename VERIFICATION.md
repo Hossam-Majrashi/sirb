@@ -1241,5 +1241,19 @@ hook now repairs only that exact structured Xcodeproj signature and saves the
 aggregate xcconfig, preserving all other frameworks/libraries/-ObjC/inheritance.
 It never renames CEF's framework/install name or clears OTHER_LDFLAGS wholesale.
 The Ruby fixture also checks preservation, idempotence and non-CEF Chromium flags.
-Mac DMGs and complete merged checksums still require the next successful run.
+Mac DMGs and complete merged checksums still required the next successful run.
+
+Run `39898594098` passed shared validation and **all three macOS jobs**, both
+Windows jobs and Linux aarch64. The three real DMGs passed native Mach-O/helper
+architecture and ad-hoc signature verification and uploaded successfully; no
+runtime/Gatekeeper/notarization success is inferred. Only Linux x86_64 failed:
+its Azure HTTP Ubuntu mirror downloaded recommended multimedia dependencies at
+about 100KB/s and exhausted the 15-minute setup budget before compilation. A
+same-commit job-only rerun was attempted; the mirror remained slow. The CI-only
+APT bootstrap now selects the same signed official Ubuntu archive over HTTPS,
+sets bounded retries/connection timeouts, and avoids unrelated recommended
+packages (all explicit build/runtime dependencies remain). ARM ports and other
+vendor repositories, APT signature/TLS checks and app sandbox policy are unchanged.
+The bootstrap refuses non-GitHub hosts. Native/merged artifacts now expire after
+one day to limit multi-GB Actions storage; public releases are separate.
 
