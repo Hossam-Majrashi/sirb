@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  group: desktop-${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: ${{ github.ref_type != 'tag' && inputs.publish != true }}
 
 env:
@@ -82,6 +82,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Native packaging toolchain
+        timeout-minutes: 15
         run: bash tool/ci_linux_setup.sh
       - uses: ./.github/actions/flutter
       - name: Build native Linux packages and update metadata
@@ -126,7 +127,7 @@ jobs:
         with:
           python-version: '3.12'
       - uses: ./.github/actions/flutter
-      - name: Install WiX and locate native-runner Inno Setup
+      - name: Install pinned WiX and checksum-verified Inno Setup
         shell: pwsh
         run: ./tool/ci_windows_setup.ps1
       - name: Build native bundle, MSI, setup EXE and portable ZIP

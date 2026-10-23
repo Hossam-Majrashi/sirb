@@ -1163,3 +1163,13 @@ the pinned SHA before invoking Flutter. This preserves SDK version metadata
 without trusting a movable tag or fetching the entire SDK history. Native jobs
 were skipped in that first run; it is not a successful build.
 
+The subsequent run (`39890467661`) passed the complete validation job on GitHub
+and started all seven native targets. It exposed two additional preparation
+issues: hosted Windows compiler discovery/version checks rejected Inno Setup,
+and all macOS helper links referenced CEF's debug-only ref-counted destructor
+while using a Release wrapper. CI now installs SHA-256-verified Inno 6.7.3;
+macOS standalone helper compilation matches the wrapper's Release/RelWithDebInfo/
+MinSizeRel `NDEBUG` setting, retaining Debug semantics for Debug builds. No CEF
+source stubs or missing-source exclusions were added. Those failed jobs are not
+claimed successful; follow the latest workflow for the retest.
+

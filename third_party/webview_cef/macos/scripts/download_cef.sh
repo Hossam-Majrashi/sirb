@@ -212,8 +212,13 @@ arch_flags=()
 for arch in "${ARCHS[@]}"; do
   arch_flags+=(-arch "${arch}")
 done
+# CEF's ref-counted base layout/destructor changes with DCHECK_IS_ON(). Match
+# the wrapper's CMake configuration or a Release helper references debug-only
+# symbols absent from libcef_dll_wrapper.a (and can have an incompatible ABI).
+helper_defines=()
+case "${BUILD_TYPE}" in Release|RelWithDebInfo|MinSizeRel) helper_defines=(-DNDEBUG) ;; esac
 clang++ -std=c++20 -stdlib=libc++ -mmacosx-version-min=12.0 -w \
-  "${arch_flags[@]}" \
+  "${helper_defines[@]}" "${arch_flags[@]}" \
   -I "${DEST}" -I "${REPO_ROOT}/common" \
   "${MACOS_DIR}/helper/cef_helper_main.mm" \
   "${DEST}/libcef_dll_wrapper.a" \

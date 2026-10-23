@@ -20,7 +20,7 @@ tools="$RUNNER_TEMP/appimage-tools"
 mkdir -p "$tools"
 export SIRB_TOOLS_DIR="$tools"
 python3 - <<'PY'
-import hashlib, os, pathlib, platform, urllib.request
+import hashlib, os, pathlib, platform, shutil, time, urllib.request
 arch=platform.machine()
 pins={
  'x86_64': ('ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0', '2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d'),
@@ -33,7 +33,14 @@ for name,url,expected in [
  ('runtime', f'https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-{arch}', checks[1]),
 ]:
  path=base/name
- urllib.request.urlretrieve(url,path)
+ for attempt in range(3):
+  try:
+   with urllib.request.urlopen(url,timeout=120) as response, path.open('wb') as output:
+    shutil.copyfileobj(response,output)
+   break
+  except OSError:
+   if attempt==2:raise
+   time.sleep(5)
  with path.open('rb') as stream: actual=hashlib.file_digest(stream,'sha256').hexdigest()
  if actual!=expected: raise SystemExit('Tool checksum mismatch: '+name)
  path.chmod(0o755)
