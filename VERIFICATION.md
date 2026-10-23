@@ -1173,3 +1173,25 @@ MinSizeRel `NDEBUG` setting, retaining Debug semantics for Debug builds. No CEF
 source stubs or missing-source exclusions were added. Those failed jobs are not
 claimed successful; follow the latest workflow for the retest.
 
+Native Linux aarch64 **completed all seven package formats and artifact upload**
+in run `39890467661` (`packages-linux-aarch64`, about 1.02 GB). The obsolete run
+was cancelled only after that successful upload, while x64 was still downloading
+Ubuntu packages from a slow Azure mirror. This is real ARM64 build evidence, not
+interactive ARM64 runtime verification.
+
+Run `39891962354` again passed GitHub validation. Both Windows hosts installed
+the pinned installer toolchain; macOS Release helper linking also passed. The
+next native checks exposed three more portability issues, now addressed:
+- Explicit `flutter precache --macos` before manually invoking CocoaPods, so its
+  post-install hook can find FlutterMacOS.xcframework in a cold SDK checkout.
+- Canonicalize CEF cache parent paths before locking/staging/extraction. Windows
+  libarchive rejected a Flutter plugin-symlink ancestor; no extraction safety
+  option was disabled. A new hermetic symlink-parent/lock/cache-reuse regression
+  passes, bringing `tool/test_cef_download.py` to **19 passed**.
+- Qualify `CefLifeSpanHandler::WindowOpenDisposition` in declaration/definition:
+  MSVC rejected the unqualified inherited typedef as ambiguous, although Linux
+  accepted it. No popup behavior or native API signature changes.
+
+These subsequent failures are retained as failures, not successful Windows/macOS
+packages. Check the latest run for the cold native retests.
+

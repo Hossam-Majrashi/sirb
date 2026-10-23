@@ -75,6 +75,14 @@ function(prepare_prebuilt_files filepath)
     get_filename_component(filepath "${filepath}" ABSOLUTE)
     get_filename_component(parent "${filepath}" DIRECTORY)
     file(MAKE_DIRECTORY "${parent}")
+    # Flutter exposes path plugins through .plugin_symlinks on Windows. Newer
+    # libarchive correctly rejects extraction through a symlink ancestor, even
+    # when the archive itself contains no symlinks. Canonicalize the existing
+    # parent before creating lock/staging/cache paths; do not relax extraction
+    # safety or resolve an as-yet nonexistent cache directory.
+    get_filename_component(cache_name "${filepath}" NAME)
+    get_filename_component(parent "${parent}" REALPATH)
+    set(filepath "${parent}/${cache_name}")
     # Debug/release or separate build trees can share this source cache.
     file(LOCK "${filepath}.lock" GUARD FUNCTION TIMEOUT 1800)
     set(work "${filepath}.prepare")

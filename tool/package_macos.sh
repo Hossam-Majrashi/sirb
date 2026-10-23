@@ -23,6 +23,7 @@ fi
 export WEBVIEW_CEF_MACOS_ARCH=universal CEF_WRAPPER_BUILD_TYPE=Release
 flutter config --no-enable-macos-arm64-only
 flutter pub get
+flutter precache --macos
 # CocoaPods can skip prepare_command for path/development pods.
 bash third_party/webview_cef/macos/scripts/download_cef.sh
 (cd macos; pod install)

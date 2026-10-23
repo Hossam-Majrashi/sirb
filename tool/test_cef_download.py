@@ -207,6 +207,25 @@ prepare_prebuilt_files("{self.dest}")
         self.assert_preserved(self.package)
         self.assertFalse(pathlib.Path(str(self.dest)+'.previous').exists())
 
+    def test_plugin_symlink_ancestor_uses_canonical_staging_and_lock(self):
+        real_parent = self.tmp/'real plugin/third'
+        real_parent.mkdir(parents=True)
+        alias = self.tmp/'flutter/ephemeral/.plugin_symlinks/webview_cef'
+        alias.parent.mkdir(parents=True)
+        try:
+            alias.symlink_to(real_parent.parent, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f'Symlinks unavailable on test host: {error}')
+        self.dest = alias/'third/cef'
+        output = self.run_prepare()
+        canonical = real_parent/'cef'
+        self.assertIn(f'CEF distribution installed and verified: {canonical}', output)
+        self.assertIn(str(canonical)+'.prepare/extracted', output)
+        self.assertNotIn(str(alias), output)
+        self.assertTrue(pathlib.Path(str(canonical)+'.lock').exists())
+        self.assertFalse(pathlib.Path(str(canonical)+'.prepare').exists())
+        self.assertIn(f'CEF cache verified: {canonical}', self.run_prepare(url=(self.tmp/'missing').as_uri()))
+
     def test_parallel_preparations_share_a_lock(self):
         command = self.script()
         processes = [subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=self.environment)
