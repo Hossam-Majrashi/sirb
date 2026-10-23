@@ -1,6 +1,15 @@
 # Verification and Runtime Evidence
 
-This document records the automated verification and measured evidence for **Sirb** (`com.h.sirb`) on Linux x86_64, as required by the project specifications.
+This document records automated verification and measured evidence for **Sirb** (`com.h.sirb`).
+
+**Latest release CI:** [run 39902734172](https://github.com/Hossam-Majrashi/sirb/actions/runs/39902734172)
+passed all nine jobs on source `299b3b837698276557705ce3be72d0e68d573363`:
+23 genuine desktop packages plus unified `SHA256SUMS.txt`, collected and uploaded
+as `sirb-complete-1.0.0` (3,609,391,495-byte ZIP). Native build/package checks cover
+Linux x86_64/aarch64, Windows x64/ARM64 and macOS Intel/ARM64/universal. Runtime
+browser evidence remains Linux-specific; Windows installers remain unsigned and
+macOS CI DMGs ad-hoc signed, not notarized public releases. Earlier sections and
+run failures below are retained as historical verification/repair evidence.
 
 ---
 
@@ -14,7 +23,7 @@ Command: `flutter analyze`
 ## 2. Unit & Widget Tests
 
 Command: `flutter test`
-- **Result (current changes):** 37 tests passed.
+- **Result (latest full CI):** 102 tests passed; CEF plugin 4 passed, release helpers 8 passed, CEF downloader 20 passed, Ruby podspec/targeted linker configuration fixture passed.
 - **Selected test coverage:**
   1. `URL classification and DuckDuckGo-only search ignore legacy providers`: Verifies URL detection and Unicode/query encoding; old Google/Bing/Brave/Startpage preferences cannot change the provider.
   2. `100 sleeping tabs preserve order and atomic closure groups`: Verifies memory limits, vertical tab rail order, tab hibernation, and closure restoration.
@@ -52,9 +61,10 @@ Output files: `build/runtime-evidence/runtime.json`, `buffering-visibility.json`
 
 ---
 
-## 4. Packaging Outputs (`dist/`)
+## 4. Historical Local Packaging Outputs (`dist/`)
 
-The following distribution packages have been compiled and verified in `dist/`:
+The following earlier local snapshot is superseded by the standardized names and
+23-package inventory in the successful release CI recorded above/below:
 
 | Package Type | Architecture | File | Size |
 |---|---|---|---|
@@ -72,9 +82,9 @@ The following distribution packages have been compiled and verified in `dist/`:
 | Platform | Capability Status | Reason / Requirement |
 |---|---|---|
 | **Linux (x64)** | Fully Built & Verified | Primary development & test environment |
-| **Linux (Arm64)** | Build Script Ready (`build_linux.sh`) | Requires Arm64 host or configured cross-compilation sysroot |
-| **Windows (x64 / Arm64)** | Script Ready (`build_windows.ps1`) | Requires Windows 10+ host with Visual Studio 2022 C++ & Windows SDK |
-| **macOS (Universal x64 / Arm64)** | Script Ready (`build_desktop.sh`) | Requires macOS 12+ host with Xcode command line tools & CocoaPods |
+| **Linux (Arm64)** | All seven native CI packages verified | Built on native GitHub ARM64 runner; runtime untested |
+| **Windows (x64 / Arm64)** | All six native CI packages verified | Real MSVC/installer builds; unsigned; installation/runtime untested |
+| **macOS (Intel / Arm64 / Universal)** | All three native CI DMGs verified | Mach-O/helper slices and ad-hoc signatures checked; runtime/notarization untested |
 
 ## Background opening, input focus and resize regression checks
 
@@ -1263,6 +1273,37 @@ Ubuntu lists Flatpak's required `eu-strip`/`eu-elfcompress` as recommended rathe
 than hard dependencies: ARM64 reached actual Flatpak packaging, then failed on
 missing `eu-strip`. Added explicit `elfutils`, `desktop-file-utils` and `optipng`
 packaging tools instead of reinstalling FFmpeg/desktop portal recommendations or
-skipping strip/debug-symbol processing. Full same-commit collection is pending
+skipping strip/debug-symbol processing. Full same-commit collection required
 one final native rerun after this dependency correction.
+
+### Final complete native run: PASS
+
+[Run `39902734172`](https://github.com/Hossam-Majrashi/sirb/actions/runs/39902734172)
+on source `299b3b837698276557705ce3be72d0e68d573363` completed **all nine jobs
+successfully**: validation, seven native packaging targets, complete collection.
+
+- Linux x86_64 and aarch64: AppImage, real `.zsync`, DEB, RPM, Arch, tar.gz and
+  Flatpak, all built/uploaded from the matching architecture-validated bundle.
+- Windows x64 and ARM64: genuine MSI, Inno setup EXE and portable ZIP, built and
+  uploaded with matching native Dart/MSVC and app-local CRT payloads.
+- macOS x86_64, ARM64 and universal: real DMGs; every native payload/helper slice
+  checked, single-arch bundles thinned, signatures rebuilt/strictly verified.
+- Collection downloaded all seven native artifacts, accepted **exactly 23**
+  nonempty correctly named packages, wrote unified `SHA256SUMS.txt` and uploaded
+  the 24-file `sirb-complete-1.0.0` artifact (3,609,391,495 bytes).
+- GitHub API confirmed success for all nine jobs and eight nonexpired artifacts;
+  combined ZIP server digest:
+  `sha256:0ddbd354f88444e0f5cf4ba481c52ba62c9d3b200606160eff10684d2a342959`.
+  Local audit metadata: `build/release-ci-status.json`; collection log:
+  `/tmp/sirb-successful-collection.log`.
+
+This run had publication disabled. Existing public `v1.0.0` release/tag remains
+unchanged. The full publisher/draft protections are fixture-tested, not proof of
+Apple notarization or a live all-platform release upload. For public automation,
+configure the six macOS credentials, increment pubspec version/build number, then
+push its matching new version tag. Windows remains unsigned; real install and
+browser runtime/Gatekeeper tests on Windows/macOS remain separate work. Artifacts
+expire after one day and require GitHub login to download; releases are separate.
+Only desktop is targeted; no new screen, interface text or browser policy changes
+were introduced by the packaging automation.
 

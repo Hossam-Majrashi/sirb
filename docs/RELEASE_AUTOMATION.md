@@ -109,6 +109,17 @@ matched MSVC CRT DLLs are included. Choose **one** installer format, not both;
 portable ZIP users need neither installer. Windows code-signing credentials and
 Authenticode integration are not implemented by this change.
 
+## Verified full native build
+
+[Run 39902734172](https://github.com/Hossam-Majrashi/sirb/actions/runs/39902734172)
+passed all nine jobs on `299b3b837698276557705ce3be72d0e68d573363` and uploaded all
+23 packages plus unified checksums as `sirb-complete-1.0.0`. The complete ZIP is
+about 3.6 GB; the seven platform artifacts can be downloaded separately. This was
+a non-publishing run: macOS DMGs are ad-hoc signed development builds and Windows
+installers unsigned. Build success is not an installation/browser runtime test.
+Public Apple signing/notarization and live all-platform release publication still
+require the credentials/new version described above. See VERIFICATION.md.
+
 ## Local packaging and checks
 
 - Linux: `SIRB_LINUX_ARCH=x64 bash build_linux.sh`, then
