@@ -341,7 +341,7 @@ FLUTTER_PLUGIN_EXPORT gboolean processKeyEventForCEF(GtkWidget *widget, GdkEvent
   const bool accelerator = (is_ctrl &&
     (key==GDK_KEY_t || key==GDK_KEY_w || key==GDK_KEY_l || key==GDK_KEY_f || key==GDK_KEY_r ||
      key==GDK_KEY_h || key==GDK_KEY_j || key==GDK_KEY_d ||
-     key==GDK_KEY_c || key==GDK_KEY_v || key==GDK_KEY_x || key==GDK_KEY_a || key==GDK_KEY_z ||
+     key==GDK_KEY_c || key==GDK_KEY_v || key==GDK_KEY_x || key==GDK_KEY_a || key==GDK_KEY_z || key==GDK_KEY_y ||
      key==GDK_KEY_equal || key==GDK_KEY_plus || key==GDK_KEY_minus || key==GDK_KEY_0 ||
      key==GDK_KEY_Tab || key==GDK_KEY_ISO_Left_Tab || (key>=GDK_KEY_1 && key<=GDK_KEY_9))) ||
     (is_alt && (key==GDK_KEY_Left || key==GDK_KEY_Right)) ||

@@ -87,7 +87,7 @@ class _AddressBarState extends State<AddressBar> {
               tooltip: t?.loading == true ? l.stop : l.reload,
               onPressed: () => t?.loading == true
                   ? t?.controller?.hostControl('stop', '')
-                  : t?.controller?.reload(),
+                  : b.reload(),
               icon: Icon(
                 t?.loading == true ? Icons.close : Icons.refresh,
                 size: 20,

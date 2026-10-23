@@ -132,6 +132,7 @@ void main() {
     '/@fixture/videos',
     '/@fixture/streams',
     '/feed/subscriptions',
+    '/feed/history',
   ]) {
     test('known console notices on browsing route $path retain evidence', () {
       final url = 'https://www.youtube.com$path';
@@ -170,6 +171,48 @@ void main() {
       expect(records[1]['originalCategory'], 'permission');
     });
   }
+
+  test('watch chat replay probe is narrow and retains original evidence', () {
+    const source = 'https://www.youtube.com/live_chat_replay?continuation=test';
+    for (final event in [
+      {'url': page, 'source': source, 'severity': 3},
+      {'url': page, 'source': source, 'severity': 4},
+      {
+        'url': 'https://www.youtube.com/playables/game',
+        'source': source,
+        'severity': 3,
+      },
+      {
+        'url': page,
+        'source': 'https://www.youtube.com/live_chat_replay/game',
+        'severity': 3,
+      },
+      {
+        'url': page,
+        'source': 'https://evil.test/live_chat_replay',
+        'severity': 3,
+      },
+      {
+        'url': 'https://www.youtube.com/feed/history',
+        'source': source,
+        'severity': 3,
+      },
+    ]) {
+      record({
+        'category': 'javascript',
+        'message': 'No available adapters.',
+        ...event,
+      });
+    }
+    expect(records.first['category'], 'compatibility');
+    expect(records.first['originalCategory'], 'graphics');
+    expect(records.first['source'], source);
+    expect(records.first['capabilityProbe'], true);
+    expect(
+      records.skip(1).every((r) => r['category'] != 'compatibility'),
+      true,
+    );
+  });
 
   test(
     'browsing notices do not downgrade transfer, HTTP or site JS faults',
@@ -316,6 +359,8 @@ void main() {
       '/s/_/ytmainappweb/_/js/module',
       '/results/game',
       '/feed/subscriptions/game',
+      '/feed/history/game',
+      '/live_chat_replay',
     ]) {
       final url = 'https://www.youtube.com$path';
       router.record(

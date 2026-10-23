@@ -86,6 +86,24 @@ void WebviewHandler::OnResourceLoadComplete(CefRefPtr<CefBrowser> browser,
   }
   sirbEvent(browser->GetIdentifier(), sirb_json(event));
 }
+void WebviewHandler::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+  CefRefPtr<CefFrame> frame, CefRefPtr<CefContextMenuParams> params,
+  CefRefPtr<CefMenuModel> model) {
+  // Windowed game hosts retain Chromium's own menu. For Texture hosts, use
+  // Chromium hit-testing (including shadow DOM and cross-origin frames), not
+  // event.target/closest in the page. Coordinates are view-relative DIPs,
+  // independent of page zoom and the frame's local CSS coordinate system.
+  if (!browser->GetHost()->IsWindowRenderingDisabled()) return;
+  model->Clear();
+  auto event = CefDictionaryValue::Create();
+  event->SetString("type", "contextMenu");
+  event->SetInt("x", params->GetXCoord());
+  event->SetInt("y", params->GetYCoord());
+  event->SetString("link", params->GetLinkUrl());
+  event->SetString("selection", params->GetSelectionText());
+  event->SetBool("editable", params->IsEditable());
+  sirbEvent(browser->GetIdentifier(), sirb_json(event));
+}
 void WebviewHandler::sirbControl(int browserId, std::string action, std::string value) {
   if (!CefCurrentlyOn(TID_UI)) {
     CefPostTask(TID_UI, base::BindOnce(&WebviewHandler::sirbControl, this, browserId, action, value));

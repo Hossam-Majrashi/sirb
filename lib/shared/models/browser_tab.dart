@@ -22,6 +22,8 @@ class BrowserTab {
   String? loadError;
   // Runtime-only: a new/rebuilt engine must be probed again, not session-restored.
   bool missingStreamCodecs = false;
+  // A terminated CEF renderer must be recreated on selection/retry, not reused.
+  bool rendererTerminated = false;
   bool media = false, loading = false, canBack = false, canForward = false;
   int blocked = 0;
   double zoom = 0;

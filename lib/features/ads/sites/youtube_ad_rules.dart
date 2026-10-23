@@ -24,25 +24,64 @@ const youtubeScripts = <String>[
     if (!/(^|\.)youtube\.com$/.test(location.hostname)) return;
     if (window.__sirbYouTube) { window.__sirbUpdateYouTubeAds?.(); return; }
     window.__sirbYouTube = true;
-    const clean = object => {
-      if (!object || typeof object !== 'object') return object;
+    const originalParse = JSON.parse, originalStringify = JSON.stringify;
+    const clean = (object,depth=0) => {
+      if (!object || typeof object !== 'object' || depth>3) return false;
+      let changed=false;
       for (const key of ['adPlacements','playerAds','adSlots','adBreakHeartbeatParams']) {
-        try { if (Object.prototype.hasOwnProperty.call(object,key)) delete object[key]; } catch (_) {}
+        try { if (Object.prototype.hasOwnProperty.call(object,key)) changed=delete object[key] || changed; } catch (_) {}
       }
-      return object;
+      // Only known player envelopes, not an unbounded walk through comments,
+      // recommendations or arbitrary site data. Legacy configs serialize the
+      // player response inside args.player_response.
+      for (const key of ['playerResponse','player_response','response','args']) {
+        try {
+          const value=object[key];
+          if ((key==='playerResponse'||key==='player_response') && typeof value==='string') {
+            const parsed=Reflect.apply(originalParse,JSON,[value]);
+            if(clean(parsed,depth+1)){object[key]=Reflect.apply(originalStringify,JSON,[parsed]);changed=true;}
+          } else if(value && typeof value==='object') changed=clean(value,depth+1)||changed;
+        } catch (_) {}
+      }
+      return changed;
     };
-    const originalParse = JSON.parse;
-    JSON.parse = function(...args) {
-      const value = Reflect.apply(originalParse, this, args);
-      if (window.__sirbBlocking === false) return value;
-      try { clean(value); if (value && value.playerResponse) clean(value.playerResponse); } catch (_) {}
+    const filter=value=>{
+      if(window.__sirbBlocking !== false) { try{clean(value);}catch(_){} }
       return value;
     };
+    JSON.parse = function(...args) {
+      return filter(Reflect.apply(originalParse, this, args));
+    };
+    const playerEndpoint=url=>{
+      try {
+        const parsed=new URL(url,location.href);
+        return parsed.origin===location.origin && /^\/youtubei\/v1\/(player|next)$/.test(parsed.pathname);
+      } catch(_){return false;}
+    };
+    // Response.json() and XHR responseType=json use Chromium's parser, not the
+    // page's JSON.parse. Filter only successful same-origin playback envelopes,
+    // without replacing fetch/XHR, cloning streams or changing headers/status,
+    // credentials, AbortSignal, rejected promises or media bytes.
+    const originalJson=Response.prototype.json;
+    Response.prototype.json=function(...args){
+      const result=Reflect.apply(originalJson,this,args);
+      try { if(this.ok && playerEndpoint(this.url))return result.then(filter); } catch(_) {}
+      return result;
+    };
+    try {
+      const descriptor=Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype,'response');
+      if(descriptor?.get)Object.defineProperty(XMLHttpRequest.prototype,'response',{
+        ...descriptor,get:function(){
+          const value=Reflect.apply(descriptor.get,this,[]);
+          return this.responseType==='json' && this.status>=200 && this.status<300 && playerEndpoint(this.responseURL) ? filter(value) : value;
+        }
+      });
+    } catch(_) {}
     try {
       let response = window.ytInitialPlayerResponse;
       Object.defineProperty(window,'ytInitialPlayerResponse', {
-        configurable:true, get:()=>response, set:value=>{response=window.__sirbBlocking === false ? value : clean(value);}
-      }); if (window.__sirbBlocking !== false) clean(response);
+        configurable:true, enumerable:true, get:()=>response, set:value=>{response=filter(value);}
+      }); filter(response);
     } catch (_) {}
 
     let player, timer=0, suspended=false;

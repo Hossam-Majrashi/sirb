@@ -49,9 +49,13 @@ def main():
 
             def do_GET(self):
                 media = self.path.startswith('/clip.webm')
-                body = clip if media else FIXTURE
-                self.send_response(200)
-                self.send_header('Content-Type', 'video/webm' if media else 'text/html')
+                api = self.path.startswith(('/youtubei/', '/unrelated-api'))
+                payload = {'adPlacements': [{'ad': True}], 'playerAds': [{}],
+                           'adSlots': [{}], 'videoDetails': {'videoId': 'content'},
+                           'streamingData': {'formats': [{'url': '/clip.webm'}]}}
+                body = (b'not-json' if 'invalid' in self.path else json.dumps(payload).encode()) if api else clip if media else FIXTURE
+                self.send_response(404 if 'failure' in self.path else 200)
+                self.send_header('Content-Type', 'application/json' if api else 'video/webm' if media else 'text/html')
                 self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -156,9 +160,37 @@ def main():
 
             navigate('www.youtube.com')
             assert js("return !('adPlacements' in JSON.parse('{\"adPlacements\":[],\"videoDetails\":{}}'))")
+            assert js('''const value=JSON.parse(JSON.stringify({args:{player_response:JSON.stringify({adSlots:[{}],videoDetails:{videoId:'content'}})}}));
+              const player=JSON.parse(value.args.player_response);return !('adSlots' in player)&&player.videoDetails.videoId==='content';''')
+            js("window.ytInitialPlayerResponse={adPlacements:[{}],videoDetails:{videoId:'initial'}}")
+            assert js("return !('adPlacements' in ytInitialPlayerResponse)&&ytInitialPlayerResponse.videoDetails.videoId==='initial'")
+
+            def api_probe(path, xhr=False):
+                js('window.apiProbe=undefined;' + ('''
+                  const xhr=new XMLHttpRequest();xhr.open('GET',PATH);xhr.responseType='json';
+                  xhr.onload=()=>window.apiProbe=xhr.response;xhr.send();''' if xhr else '''
+                  fetch(PATH).then(r=>r.json()).then(value=>window.apiProbe=value);''').replace('PATH', json.dumps(path)))
+                wait(lambda: js('return window.apiProbe!==undefined'), 'API response')
+                return js('return window.apiProbe')
+
+            for xhr in [False, True]:
+                for path in ['/youtubei/v1/player', '/youtubei/v1/next?videoId=content']:
+                    value = api_probe(path, xhr)
+                    assert 'adPlacements' not in value and 'playerAds' not in value and 'adSlots' not in value
+                    assert value['videoDetails'] == {'videoId': 'content'}
+                    assert value['streamingData']['formats'][0]['url'] == '/clip.webm'
+                for path in ['/unrelated-api', '/youtubei/v1/player?failure', '/youtubei/v1/player/other']:
+                    assert 'adPlacements' in api_probe(path, xhr), 'unrelated/error responses untouched'
+            js('''window.jsonFailure=null;fetch('/youtubei/v1/player?invalid').then(r=>r.json()).catch(e=>jsonFailure=e.name);
+              window.abortFailure=null;const controller=new AbortController();
+              fetch('/youtubei/v1/player',{signal:controller.signal}).catch(e=>abortFailure=e.name);controller.abort();''')
+            wait(lambda: js("return jsonFailure==='SyntaxError'&&abortFailure==='AbortError'"), 'native JSON/abort failures preserved')
             js("window.__sirbBlocking=false")
             assert js("return 'adPlacements' in JSON.parse('{\"adPlacements\":[]}')")
+            for xhr in [False, True]:
+                assert 'adPlacements' in api_probe('/youtubei/v1/player', xhr), 'shield off bypasses native JSON filtering'
             js(policy['ads'])
+            assert 'adPlacements' not in api_probe('/youtubei/v1/player'), 'live re-enable'
             fake_ad()
             wait(lambda: js('return probe.seeks') == 1, 'one ad seek')
             js("for(let i=0;i<500;i++)document.querySelector('.ytp-ad-skip-button').classList.toggle('probe')")

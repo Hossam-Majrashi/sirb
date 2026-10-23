@@ -131,6 +131,18 @@ void WebviewApp::OnBeforeCommandLineProcessing(const CefString &process_type, Ce
         }
     }
 
+#if defined(OS_LINUX)
+    // CEF's automatic OSR backend can keep an in-process clipboard instead of
+    // the desktop selection: Copy/Paste then works between web inputs but not
+    // between CEF and Flutter/other applications. Use the real X11 clipboard
+    // when an X display is available (including XWayland). Preserve explicit
+    // backend choices and never force an unavailable X11 on Wayland-only hosts.
+    const char* display = std::getenv("DISPLAY");
+    if (!command_line->HasSwitch("ozone-platform") && display && display[0]) {
+        command_line->AppendSwitchWithValue("ozone-platform", "x11");
+    }
+#endif
+
     const char* webgpu = std::getenv("SIRB_WEBGPU_ENABLED");
     if (webgpu && std::string(webgpu) == "0") {
         // Let sites fall back to hardware WebGL without disabling the GPU.

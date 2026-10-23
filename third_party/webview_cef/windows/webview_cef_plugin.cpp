@@ -463,6 +463,18 @@ namespace webview_cef {
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 		case WM_CHAR: {
+			// Flutter routes editing chords either to its focused editor or to
+			// Sirb's single focused-frame command. This post-dispatch hook must
+			// not also send the raw chord (or its control CHAR) to Chromium.
+			const bool editKey = wparam == 'A' || wparam == 'C' ||
+				wparam == 'V' || wparam == 'X' || wparam == 'Y' || wparam == 'Z';
+			const bool editChar = wparam == 1 || wparam == 3 ||
+				wparam == 22 || wparam == 24 || wparam == 25 || wparam == 26;
+			if (IsKeyDown(VK_CONTROL) && !IsKeyDown(VK_MENU) &&
+				((message == WM_CHAR && editChar) ||
+				 ((message == WM_KEYDOWN || message == WM_KEYUP) && editKey))) {
+				break;
+			}
 			if (webviewPlugins.find(hwnd) != webviewPlugins.end()) {
 				CefKeyEvent keyEvent = getCefKeyEvent(message, wparam, lparam);
 				webviewPlugins[hwnd]->sendKeyEvent(keyEvent);

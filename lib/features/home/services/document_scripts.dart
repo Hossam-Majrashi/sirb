@@ -92,16 +92,12 @@ String documentTelemetry({
       send({type:'navigate',url,newTab:true,background:(event.ctrlKey||event.metaKey)&&!event.shiftKey});
     }
   },true);
-  document.addEventListener('contextmenu',event=>{
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    const link=event.target&&event.target.closest?event.target.closest('a[href]'):null;
-    let linkUrl=null;
-    if(link){try{linkUrl=new URL(link.href).href;}catch(_){linkUrl=link.href;}}
-    const selection=(event.target&&(event.target.tagName==='INPUT'||event.target.tagName==='TEXTAREA'))?event.target.value.substring(event.target.selectionStart||0,event.target.selectionEnd||0):(window.getSelection()?window.getSelection().toString():'');
-    const isEditable=!!(event.target&&(event.target.isContentEditable||event.target.tagName==='INPUT'||event.target.tagName==='TEXTAREA'));
-    send({type:'contextMenu',x:event.clientX,y:event.clientY,link:linkUrl,selection,editable:isEditable});
+  // Reserve the browser menu before site window/document handlers (YouTube
+  // installs its own). Do NOT cancel Chromium's default action: the native
+  // CefContextMenuHandler supplies one hit-tested menu, including shadow DOM,
+  // editable selections and cross-origin frame coordinates. No JS edit path.
+  window.addEventListener('contextmenu',event=>{
+    if(event.isTrusted) event.stopImmediatePropagation();
   },true);
   if(window.__sirbPreload) {
     const install=()=>{

@@ -7,6 +7,7 @@
 
 #include "include/cef_client.h"
 #include "include/cef_request_handler.h"
+#include "include/cef_context_menu_handler.h"
 #include "include/cef_resource_request_handler.h"
 #include "include/cef_download_handler.h"
 #include "include/cef_request_context_handler.h"
@@ -49,6 +50,7 @@ class WebviewHandler : public CefClient,
 public CefDisplayHandler,
 public CefLifeSpanHandler,
 public CefFocusHandler,
+public CefContextMenuHandler,
 public CefLoadHandler,
 public CefRenderHandler,
 public CefRequestHandler,
@@ -83,6 +85,10 @@ public:
     std::function<void(std::string)> onNativeEvent;
     CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
     CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
+    CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override { return this; }
+    void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+        CefRefPtr<CefFrame> frame, CefRefPtr<CefContextMenuParams> params,
+        CefRefPtr<CefMenuModel> model) override;
     CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
         CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
         CefRefPtr<CefRequest> request, bool navigation, bool download,

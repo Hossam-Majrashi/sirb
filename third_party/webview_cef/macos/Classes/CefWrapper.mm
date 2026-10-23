@@ -214,7 +214,12 @@ private:
 + (BOOL)processKeyboardEvent: (NSEvent*) event {
     NSString* key=[[event charactersIgnoringModifiers] lowercaseString];
     BOOL chord=([event modifierFlags] & NSEventModifierFlagCommand) != 0;
-    if ([event keyCode]==103 || (chord && ([event keyCode]==48 || [@[@"t",@"w",@"l",@"f",@"r",@"c",@"v",@"x",@"a",@"z",@"\t",@"1",@"2",@"3",@"4",@"5",@"6",@"7",@"8",@"9"] containsObject:key]))) return false;
+    // Editing commands are owned by Flutter/Sirb once. Reserve physical keys
+    // too: charactersIgnoringModifiers can be Arabic/Cyrillic while Flutter's
+    // layout-independent activator still recognizes the same editing chord.
+    const unsigned short code = [event keyCode];
+    const BOOL editingKey = code==0 || code==8 || code==9 || code==7 || code==16 || code==6;
+    if ([event keyCode]==103 || (chord && (editingKey || [event keyCode]==48 || [@[@"t",@"w",@"l",@"f",@"r",@"c",@"v",@"x",@"a",@"z",@"y",@"\t",@"1",@"2",@"3",@"4",@"5",@"6",@"7",@"8",@"9"] containsObject:key]))) return false;
     CefWrapper *currentPlugin = [webviewPlugins objectForKey:event.window.contentView];
     if(currentPlugin == nil || !currentPlugin->_plugin->getAnyBrowserFocused()){
         return false;

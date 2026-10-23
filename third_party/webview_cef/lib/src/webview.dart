@@ -838,7 +838,8 @@ class WebViewState extends State<WebView> with WebeViewTextInput {
             }
           },
           onPointerMove: (ev) {
-            if (_lastClickButton != -1) {
+            // A secondary-button move must not masquerade as a left drag.
+            if (_lastClickButton == 0) {
               _controller._cursorDragging(ev.localPosition);
             } else {
               _controller._cursorMove(ev.localPosition);

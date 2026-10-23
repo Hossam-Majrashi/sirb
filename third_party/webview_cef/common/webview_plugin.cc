@@ -381,10 +381,18 @@ namespace webview_cef {
         }
 		else if (name.compare("close") == 0) {
 			int browserId = int(webview_value_get_int(values));
-			m_handler->closeBrowser(browserId);
-			if(m_renderers.find(browserId) != m_renderers.end() && m_renderers[browserId] != nullptr) {
-				m_renderers[browserId].reset();
-			}
+            std::shared_ptr<WebviewTexture> retiring;
+            auto entry = m_renderers.find(browserId);
+            if (entry != m_renderers.end()) {
+                retiring = std::move(entry->second);
+                m_renderers.erase(entry);
+            }
+            // Neither CEF close callbacks nor texture unregistration may run
+            // under the paint-map lock: both can wait for another thread that
+            // needs this mutex, especially after renderer termination.
+            lock.unlock();
+            m_handler->closeBrowser(browserId);
+            retiring.reset();
 			result(1, nullptr);
 		}
 		else if (name.compare("loadUrl") == 0) {

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -40,6 +39,7 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
   final addressFocus = FocusNode(), findFocus = FocusNode();
   final findText = TextEditingController();
   final _webviewKey = GlobalKey();
+  final _webContentFocus = FocusNode(debugLabel: 'browser web content');
   bool ready = false, collapsed = false, findOpen = false;
   String? failure;
   @override
@@ -117,6 +117,7 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
   @override
   void dispose() {
     windowManager.removeListener(this);
+    _webContentFocus.dispose();
     addressFocus.dispose();
     findFocus.dispose();
     findText.dispose();
@@ -309,9 +310,9 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
       meta: cmd && !alt,
       shift: shift,
       alt: alt,
-      predicate: checkFocus
-          ? () => !addressFocus.hasFocus && !findFocus.hasFocus
-          : null,
+      // Positive ownership: new-tab search, dialogs and every Flutter editor
+      // must retain their own editing shortcuts, not just address/find fields.
+      predicate: checkFocus ? () => _webContentFocus.hasFocus : null,
     );
 
     return {
@@ -325,137 +326,29 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
       key(PhysicalKeyboardKey.keyL, LogicalKeyboardKey.keyL): () =>
           addressFocus.requestFocus(),
       key(PhysicalKeyboardKey.keyF, LogicalKeyboardKey.keyF): _find,
-      key(PhysicalKeyboardKey.keyR, LogicalKeyboardKey.keyR): () =>
-          b.active?.controller?.reload(),
+      key(PhysicalKeyboardKey.keyR, LogicalKeyboardKey.keyR): () => b.reload(),
       key(PhysicalKeyboardKey.keyR, LogicalKeyboardKey.keyR, shift: true): () =>
-          b.active?.controller?.reload(),
-      key(
-        PhysicalKeyboardKey.keyA,
-        LogicalKeyboardKey.keyA,
-        checkFocus: true,
-      ): () {
-        final tab = b.active;
-        if (tab == null || tab.controller == null) return;
-        unawaited(tab.controller!.hostControl('selectAll', ''));
-        tab.controller!.executeJavaScript(
-          '(() => {'
-          '  const a = document.activeElement;'
-          '  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) {'
-          '    a.select();'
-          '  } else {'
-          '    document.execCommand("selectAll");'
-          '  }'
-          '})();',
-        );
-      },
-      key(
-        PhysicalKeyboardKey.keyC,
-        LogicalKeyboardKey.keyC,
-        checkFocus: true,
-      ): () async {
-        final tab = b.active;
-        if (tab == null || tab.controller == null) return;
-        unawaited(tab.controller!.hostControl('copy', ''));
-        final selected = await tab.controller!.evaluateJavascript(
-          '(() => {'
-          '  const a = document.activeElement;'
-          '  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) {'
-          '    const s = a.selectionStart ?? 0, e = a.selectionEnd ?? 0;'
-          '    return a.value.substring(s, e);'
-          '  }'
-          '  return window.getSelection() ? window.getSelection().toString() : "";'
-          '})();',
-        );
-        if (selected is String && selected.isNotEmpty) {
-          await Clipboard.setData(ClipboardData(text: selected));
-        }
-        await tab.controller!.executeJavaScript(
-          'document.execCommand("copy");',
-        );
-      },
-      key(
-        PhysicalKeyboardKey.keyX,
-        LogicalKeyboardKey.keyX,
-        checkFocus: true,
-      ): () async {
-        final tab = b.active;
-        if (tab == null || tab.controller == null) return;
-        unawaited(tab.controller!.hostControl('cut', ''));
-        final selected = await tab.controller!.evaluateJavascript(
-          '(() => {'
-          '  const a = document.activeElement;'
-          '  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) {'
-          '    const s = a.selectionStart ?? 0, e = a.selectionEnd ?? 0;'
-          '    return a.value.substring(s, e);'
-          '  }'
-          '  return window.getSelection() ? window.getSelection().toString() : "";'
-          '})();',
-        );
-        if (selected is String && selected.isNotEmpty) {
-          await Clipboard.setData(ClipboardData(text: selected));
-        }
-        await tab.controller!.executeJavaScript('document.execCommand("cut");');
-      },
-      key(
-        PhysicalKeyboardKey.keyV,
-        LogicalKeyboardKey.keyV,
-        checkFocus: true,
-      ): () async {
-        final tab = b.active;
-        if (tab == null || tab.controller == null) return;
-        unawaited(tab.controller!.hostControl('paste', ''));
-        final clip = await Clipboard.getData(Clipboard.kTextPlain);
-        final text = clip?.text ?? '';
-        if (text.isNotEmpty) {
-          await tab.controller!.executeJavaScript(
-            '(() => {'
-            '  const a = document.activeElement;'
-            '  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) {'
-            '    const s = a.selectionStart ?? a.value.length;'
-            '    const e = a.selectionEnd ?? a.value.length;'
-            '    const val = a.value;'
-            '    a.value = val.substring(0, s) + ${jsonEncode(text)} + val.substring(e);'
-            '    a.selectionStart = a.selectionEnd = s + ${jsonEncode(text)}.length;'
-            '    a.dispatchEvent(new Event("input", { bubbles: true }));'
-            '    a.dispatchEvent(new Event("change", { bubbles: true }));'
-            '  } else {'
-            '    document.execCommand("insertText", false, ${jsonEncode(text)});'
-            '  }'
-            '})();',
-          );
-        }
-      },
-      key(
-        PhysicalKeyboardKey.keyZ,
-        LogicalKeyboardKey.keyZ,
-        checkFocus: true,
-      ): () {
-        final tab = b.active;
-        if (tab == null || tab.controller == null) return;
-        unawaited(tab.controller!.hostControl('undo', ''));
-        tab.controller!.executeJavaScript('document.execCommand("undo");');
-      },
-      key(
-        PhysicalKeyboardKey.keyY,
-        LogicalKeyboardKey.keyY,
-        checkFocus: true,
-      ): () {
-        final tab = b.active;
-        if (tab == null || tab.controller == null) return;
-        unawaited(tab.controller!.hostControl('redo', ''));
-        tab.controller!.executeJavaScript('document.execCommand("redo");');
-      },
+          b.reload(),
+      // Exactly one focused-frame CEF command per edit. A JavaScript fallback
+      // here races the native operation, duplicates paste/cut/undo, bypasses
+      // site paste handlers and cannot target cross-origin focused frames.
+      for (final edit in {
+        (PhysicalKeyboardKey.keyA, LogicalKeyboardKey.keyA): 'selectAll',
+        (PhysicalKeyboardKey.keyC, LogicalKeyboardKey.keyC): 'copy',
+        (PhysicalKeyboardKey.keyX, LogicalKeyboardKey.keyX): 'cut',
+        (PhysicalKeyboardKey.keyV, LogicalKeyboardKey.keyV): 'paste',
+        (PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ): 'undo',
+        (PhysicalKeyboardKey.keyY, LogicalKeyboardKey.keyY): 'redo',
+      }.entries)
+        key(edit.key.$1, edit.key.$2, checkFocus: true): () =>
+            b.active?.controller?.hostControl(edit.value, ''),
       key(
         PhysicalKeyboardKey.keyZ,
         LogicalKeyboardKey.keyZ,
         shift: true,
         checkFocus: true,
-      ): () {
-        final tab = b.active;
-        if (tab == null || tab.controller == null) return;
-        unawaited(tab.controller!.hostControl('redo', ''));
-        tab.controller!.executeJavaScript('document.execCommand("redo");');
-      },
+      ): () =>
+          b.active?.controller?.hostControl('redo', ''),
       key(PhysicalKeyboardKey.keyH, LogicalKeyboardKey.keyH): () =>
           _menu('history'),
       key(PhysicalKeyboardKey.keyJ, LogicalKeyboardKey.keyJ): () =>
@@ -483,7 +376,7 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
         PhysicalKeyboardKey.f5,
         LogicalKeyboardKey.f5,
       ): () =>
-          b.active?.controller?.reload(),
+          b.reload(),
       const UniversalActivator(PhysicalKeyboardKey.f11, LogicalKeyboardKey.f11):
           _fullscreen,
       const UniversalActivator(
@@ -741,10 +634,7 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
                                             ),
                                             const SizedBox(height: 16),
                                             FilledButton(
-                                              onPressed: () => b
-                                                  .active
-                                                  ?.controller
-                                                  ?.reload(),
+                                              onPressed: () => b.reload(),
                                               child: Text(l.retry),
                                             ),
                                           ],
@@ -780,17 +670,21 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
                                           valueListenable:
                                               b.active!.controller!,
                                           builder: (context, ready, child) =>
-                                              SizedBox.expand(
-                                                key: _webviewKey,
-                                                child: ready
-                                                    ? b
-                                                          .active!
-                                                          .controller!
-                                                          .webviewWidget
-                                                    : b
-                                                          .active!
-                                                          .controller!
-                                                          .loadingWidget,
+                                              Focus(
+                                                focusNode: _webContentFocus,
+                                                canRequestFocus: false,
+                                                child: SizedBox.expand(
+                                                  key: _webviewKey,
+                                                  child: ready
+                                                      ? b
+                                                            .active!
+                                                            .controller!
+                                                            .webviewWidget
+                                                      : b
+                                                            .active!
+                                                            .controller!
+                                                            .loadingWidget,
+                                                ),
                                               ),
                                         );
                                       },
@@ -814,7 +708,8 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
     BrowserTab tab,
     Map<String, dynamic> event,
   ) async {
-    if (!mounted) return;
+    if (!mounted || widget.browser.active != tab) return;
+    final controller = tab.controller;
     final l = AppLocalizations.of(context);
     final link = event['link'] as String?;
     final selection = event['selection'] as String?;
@@ -949,57 +844,29 @@ class _BrowserScreenState extends State<BrowserScreen> with WindowListener {
       ],
     );
 
+    // A navigation/retirement or tab switch while the menu was open must not
+    // edit a replacement host or open links on behalf of an obsolete surface.
+    if (!mounted ||
+        widget.browser.active != tab ||
+        tab.controller != controller) {
+      return;
+    }
     if (selected == 'open_new_tab' && link != null) {
       await widget.browser.add(url: link, activateTab: false, openerId: tab.id);
     } else if (selected == 'copy_link' && link != null) {
       await Clipboard.setData(ClipboardData(text: link));
-    } else if (selected == 'copy') {
-      unawaited(tab.controller?.hostControl('copy', ''));
-      if (hasSelection) {
-        await Clipboard.setData(ClipboardData(text: selection));
-      }
-      await tab.controller?.executeJavaScript('document.execCommand("copy");');
-    } else if (selected == 'cut') {
-      unawaited(tab.controller?.hostControl('cut', ''));
-      if (hasSelection) {
-        await Clipboard.setData(ClipboardData(text: selection));
-      }
-      await tab.controller?.executeJavaScript('document.execCommand("cut");');
-    } else if (selected == 'paste') {
-      unawaited(tab.controller?.hostControl('paste', ''));
-      final clip = await Clipboard.getData(Clipboard.kTextPlain);
-      final text = clip?.text ?? '';
-      if (text.isNotEmpty) {
-        await tab.controller?.executeJavaScript(
-          '(() => {'
-          '  const active = document.activeElement;'
-          '  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {'
-          '    const start = active.selectionStart ?? active.value.length;'
-          '    const end = active.selectionEnd ?? active.value.length;'
-          '    const val = active.value;'
-          '    active.value = val.substring(0, start) + ${jsonEncode(text)} + val.substring(end);'
-          '    active.selectionStart = active.selectionEnd = start + ${jsonEncode(text)}.length;'
-          '    active.dispatchEvent(new Event("input", { bubbles: true }));'
-          '    active.dispatchEvent(new Event("change", { bubbles: true }));'
-          '  } else {'
-          '    document.execCommand("insertText", false, ${jsonEncode(text)});'
-          '  }'
-          '})();',
-        );
-      }
-    } else if (selected == 'select_all') {
-      await tab.controller?.executeJavaScript(
-        '(() => {'
-        '  const active = document.activeElement;'
-        '  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {'
-        '    active.select();'
-        '  } else {'
-        '    document.execCommand("selectAll");'
-        '  }'
-        '})();',
+    } else if (const {
+      'copy',
+      'cut',
+      'paste',
+      'select_all',
+    }.contains(selected)) {
+      await tab.controller?.hostControl(
+        selected == 'select_all' ? 'selectAll' : selected!,
+        '',
       );
     } else if (selected == 'reload') {
-      await tab.controller?.reload();
+      await widget.browser.reload(tab: tab);
     } else if (selected == 'back') {
       await tab.controller?.goBack();
     } else if (selected == 'forward') {

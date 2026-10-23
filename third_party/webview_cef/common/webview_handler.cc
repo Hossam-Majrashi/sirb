@@ -281,11 +281,13 @@ void WebviewHandler::CloseAllBrowsers(bool force_close) {
         return;
     }
     
-    for (auto& it : browser_map_){
-        it.second.browser->GetHost()->CloseBrowser(force_close);
-        it.second.browser = nullptr;
-    }
+    // CloseBrowser can reenter OnBeforeClose, which erases this map. Keep
+    // strong references in a snapshot, not iterators into the callback's map.
+    const auto closing = browser_map_;
     browser_map_.clear();
+    for (const auto& entry : closing) {
+        entry.second.browser->GetHost()->CloseBrowser(force_close);
+    }
 }
 
 void WebviewHandler::closeBrowser(int browserId)
@@ -296,9 +298,9 @@ void WebviewHandler::closeBrowser(int browserId)
     }
     auto it = browser_map_.find(browserId);
     if(it != browser_map_.end()){
-        it->second.browser->GetHost()->CloseBrowser(true);
-        it->second.browser = nullptr;
+        const auto browser = it->second.browser;
         browser_map_.erase(it);
+        browser->GetHost()->CloseBrowser(true);
     }
 }
 

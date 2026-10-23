@@ -34,6 +34,8 @@ class BrowserController extends ChangeNotifier {
     emit: (event, url) => _persistRuntimeError(event, fallbackUrl: url),
   );
   final Set<String> _creating = {};
+  final Map<String, Future<void>> _wakeTasks = {}, _sleepTasks = {};
+  int _activationEpoch = 0;
   int? gameWindowId;
   bool _openingGameWindow = false;
   String activeId = '';
@@ -297,37 +299,97 @@ class BrowserController extends ChangeNotifier {
   Future<void> activate(String id) async {
     final next = tabs.where((t) => t.id == id).firstOrNull;
     if (next == null) return;
+    final epoch = ++_activationEpoch;
+    bool current() =>
+        !_closing && epoch == _activationEpoch && tabs.contains(next);
     _backgroundQueue.remove(id);
     activeId = id;
     next.lastUsed = DateTime.now();
-    for (final tab in tabs) {
+    next.phase = TabPhase.active;
+    // Show selection/loading immediately, even while another hidden renderer's
+    // media snapshot or native host initialization is still in flight.
+    notifyListeners();
+    for (final tab in tabs.toList()) {
       if (tab == next) continue;
       if (tab.controller != null) {
         tab.phase = TabPhase.background;
         await tab.controller!.hostControl('hidden', !tab.media);
-        await tab.controller!.setClientFocus(false);
+        if (!current()) return;
+        await tab.controller?.setClientFocus(false);
+        if (!current()) return;
       }
     }
-    next.phase = TabPhase.active;
     if (next.url != 'sirb:new') await _wake(next);
+    if (!current()) return;
     await _updateScripts(next);
+    if (!current()) return;
     if (next.controller != null && next.controller!.value) {
       await next.controller!.setSize(viewportDpi, viewportSize);
     }
+    if (!current()) return;
     await next.controller?.hostControl('hidden', false);
+    if (!current()) return;
     await next.controller?.hostControl('muted', next.muted);
+    if (!current()) return;
     // The mounted WebView's Flutter Focus node grants keyboard focus. Do not
     // claim it here while the address bar/find field may still be in use.
     await _enforce();
-    changed();
+    if (current()) changed();
   }
 
-  Future<void> _wake(BrowserTab tab, {bool speculative = false}) async {
-    if (tab.controller != null || _creating.contains(tab.id)) {
-      await tab.controller?.ready;
+  /// Reload must also work for a sleeping/failed host. Do not send Reload to a
+  /// retired controller or leave the error UI mounted over a recovered page.
+  Future<void> reload({BrowserTab? tab}) async {
+    final target = tab ?? active;
+    if (_closing ||
+        target == null ||
+        target.url == 'sirb:new' ||
+        !tabs.contains(target)) {
       return;
     }
-    if (_closing) return;
+    final reuse = target.controller != null && !target.rendererTerminated;
+    await _wake(target);
+    final c = target.controller;
+    if (_closing || !tabs.contains(target) || c == null) return;
+    target.loadError = null;
+    target.loading = true;
+    changed();
+    await c.setSize(viewportDpi, viewportSize);
+    if (!identical(target.controller, c) || _closing) return;
+    await c.hostControl('hidden', target.id != activeId && !target.media);
+    if (reuse && identical(target.controller, c)) await c.reload();
+  }
+
+  Future<void> _wake(BrowserTab tab, {bool speculative = false}) {
+    final pending = _wakeTasks[tab.id];
+    if (pending != null) return pending;
+    if (tab.controller != null && !tab.rendererTerminated) {
+      return tab.controller!.ready;
+    }
+    late final Future<void> task;
+    task = _createTab(tab, speculative: speculative).whenComplete(() {
+      if (identical(_wakeTasks[tab.id], task)) _wakeTasks.remove(tab.id);
+    });
+    _wakeTasks[tab.id] = task;
+    return task;
+  }
+
+  Future<void> _createTab(BrowserTab tab, {required bool speculative}) async {
+    // A tab may have been selected after sleep detached its controller but
+    // before its close request completed. Join retirement before allocating
+    // the replacement; CEF may still deliver late callbacks until OnBeforeClose.
+    await _sleepTasks[tab.id];
+    if (_closing || (!tabs.contains(tab) && !_preloads.containsValue(tab))) {
+      return;
+    }
+    final retired = tab.controller;
+    if (retired != null) {
+      tab.controller = null;
+      await retired.dispose();
+    }
+    if (_closing || (!tabs.contains(tab) && !_preloads.containsValue(tab))) {
+      return;
+    }
     _creating.add(tab.id);
     final targetUrl = tab.url;
     var restorePosition = tab.videoPosition;
@@ -337,9 +399,18 @@ class BrowserController extends ChangeNotifier {
     );
     c.touchpadNaturalScroll = _systemTouchpadNatural;
     tab.controller = c;
+    tab.rendererTerminated = false;
+    tab.loadError = null;
+    tab.loading = true;
+    bool ownsHost() =>
+        !_closing &&
+        identical(tab.controller, c) &&
+        (tabs.contains(tab) || _preloads.containsValue(tab));
+    notifyListeners();
     c.setWebviewListener(
       WebviewEventsListener(
         onUrlChanged: (url) {
+          if (!ownsHost()) return;
           if (url != 'about:blank') {
             final changedUrl = tab.url != url;
             tab.url = url;
@@ -351,11 +422,13 @@ class BrowserController extends ChangeNotifier {
           }
         },
         onTitleChanged: (title) {
+          if (!ownsHost()) return;
           tab.title = title;
           if (tabs.contains(tab)) unawaited(store.updateVisitMetadata(tab));
           changed();
         },
         onLoadStart: (_, url) {
+          if (!ownsHost()) return;
           _diagnostics.resetScope(tab.id);
           tab.loading = true;
           tab.loadError = null;
@@ -367,8 +440,8 @@ class BrowserController extends ChangeNotifier {
           changed();
         },
         onLoadEnd: (_, url) {
+          if (!ownsHost() || url == 'about:blank') return;
           tab.loading = false;
-          if (url == 'about:blank') return;
           unawaited(_updateScripts(tab));
           if (restorePosition > 0) {
             final position = restorePosition;
@@ -384,7 +457,7 @@ class BrowserController extends ChangeNotifier {
           changed();
         },
         onConsoleMessage: (level, message, source, line) {
-          if (_closing) return;
+          if (!ownsHost()) return;
           if (!message.startsWith('__sirb__')) {
             if (level >= 3 && level <= 5) {
               _recordRuntimeError(
@@ -413,23 +486,30 @@ class BrowserController extends ChangeNotifier {
         },
       ),
     );
+    var initialized = false;
     try {
       await c.initialize('about:blank');
+      initialized = true;
       await c.setSize(viewportDpi, viewportSize);
       await c.hostControl('theme', engine.colorScheme);
       await c.hostControl('muted', speculative || tab.muted);
       final shouldHide = tab.id != activeId && (speculative || !tab.media);
       await c.hostControl('hidden', shouldHide);
-      if (_closing || (!tabs.contains(tab) && !_preloads.containsValue(tab))) {
+      if (!ownsHost()) {
         await c.dispose();
-        tab.controller = null;
+        if (identical(tab.controller, c)) tab.controller = null;
         return;
       }
       await c.loadUrl(targetUrl);
       tab.phase = tab.id == activeId ? TabPhase.active : TabPhase.background;
     } catch (e) {
       error = e.toString();
-      tab.controller = null;
+      if (identical(tab.controller, c)) {
+        tab.controller = null;
+        tab.loading = false;
+        tab.loadError = e.toString();
+      }
+      if (initialized) await c.dispose();
       unawaited(
         store.recordErrorLog(
           type: 'system',
@@ -646,8 +726,10 @@ class BrowserController extends ChangeNotifier {
         );
       case 'renderCrash':
         tab.loadError = event['error'] as String;
+        tab.rendererTerminated = true;
         tab.loading = false;
         tab.media = false;
+        tab.mediaFrames.clear();
         unawaited(
           store.recordErrorLog(
             type: 'crash',
@@ -770,7 +852,18 @@ class BrowserController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sleep(BrowserTab tab) async {
+  Future<void> sleep(BrowserTab tab) {
+    final pending = _sleepTasks[tab.id];
+    if (pending != null) return pending;
+    late final Future<void> task;
+    task = _sleep(tab).whenComplete(() {
+      if (identical(_sleepTasks[tab.id], task)) _sleepTasks.remove(tab.id);
+    });
+    _sleepTasks[tab.id] = task;
+    return task;
+  }
+
+  Future<void> _sleep(BrowserTab tab) async {
     if (tab.media ||
         tab.id == activeId ||
         tab.controller == null ||
@@ -780,27 +873,36 @@ class BrowserController extends ChangeNotifier {
     final c = tab.controller!;
     // Re-check immediately before destruction: a new playback event can arrive during snapshotting.
     try {
-      final state = await c.evaluateJavascript(
-        "JSON.stringify(Array.from(document.querySelectorAll('video,audio')).map(v=>({playing:!v.paused&&!v.ended,position:v.currentTime})))",
-      );
-      if (state is String) {
-        final items = jsonDecode(state) as List;
-        if (items.any((v) => v['playing'] == true)) {
-          tab.media = true;
-          return;
-        }
-        if (items.isNotEmpty) {
-          tab.videoPosition = (items.first['position'] as num).toDouble();
-        }
+      final state = await c
+          .evaluateJavascript(
+            "JSON.stringify(Array.from(document.querySelectorAll('video,audio')).map(v=>({playing:!v.paused&&!v.ended,position:v.currentTime})))",
+          )
+          .timeout(const Duration(seconds: 2));
+      if (!identical(tab.controller, c) || state is! String) return;
+      final items = jsonDecode(state) as List;
+      if (items.any((v) => v['playing'] == true)) {
+        tab.media = true;
+        return;
+      }
+      if (items.isNotEmpty) {
+        tab.videoPosition = (items.first['position'] as num).toDouble();
       }
     } catch (_) {
       return;
     }
-    if (tab.media || tab.id == activeId) return;
+    if (tab.media ||
+        tab.id == activeId ||
+        !identical(tab.controller, c) ||
+        !tabs.contains(tab)) {
+      return;
+    }
     tab.controller = null;
-    await c.dispose();
     tab.phase = TabPhase.sleeping;
+    tab.loading = false;
     changed();
+    await c.dispose();
+    // Do not write tab state after close: activation may already be waiting
+    // to recreate it. All late callbacks are rejected by host identity.
   }
 
   Future<void> _enforce() async {
@@ -1032,6 +1134,9 @@ class BrowserController extends ChangeNotifier {
     _diagnostics.dispose();
     _closing = true;
     _timer?.cancel();
+    // Host creation/retirement may still be in flight even with a null tab
+    // controller. Do not let engine shutdown overtake those native operations.
+    await Future.wait([..._wakeTasks.values, ..._sleepTasks.values]);
     await store.saveSession(tabs, activeId);
     await store.recordClosure(tabs);
     await preferences.set('clean_shutdown', true);

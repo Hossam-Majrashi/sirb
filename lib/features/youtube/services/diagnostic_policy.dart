@@ -9,7 +9,13 @@ final _channelPage = RegExp(
 );
 
 bool _isBrowsingPage(String path) =>
-    const {'/', '/watch', '/results', '/feed/subscriptions'}.contains(path) ||
+    const {
+      '/',
+      '/watch',
+      '/results',
+      '/feed/subscriptions',
+      '/feed/history',
+    }.contains(path) ||
     _shortsPage.hasMatch(path) ||
     _channelPage.hasMatch(path);
 
@@ -29,7 +35,13 @@ bool isYouTubeCompatibilityNotice({
     return false;
   }
   return switch (diagnostic) {
-    'webgpuAdapterUnavailable' => severity == 3 && script!.path == page.path,
+    'webgpuAdapterUnavailable' =>
+      severity == 3 &&
+          (script!.path == page.path ||
+              // The watch-page chat replay independently probes WebGPU. Only
+              // this known utility frame under /watch is a notice, not games
+              // or arbitrary embedded YouTube applications.
+              (page.path == '/watch' && script.path == '/live_chat_replay')),
     'frameSandboxBlockedScript' =>
       severity == 4 && script!.path.startsWith('/s/_/ytmainappweb/_/js/'),
     _ => false,

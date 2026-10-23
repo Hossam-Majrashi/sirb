@@ -888,3 +888,220 @@ blocked; official CEF H.264/AAC limitations and intermittent transport failures
 are not repaired by reclassifying these notices. Live-service availability and
 advertisement transitions are not guaranteed by short video-progression checks.
 
+## Clipboard single-dispatch and reported history/chat diagnostics
+
+- Removed parallel CEF + JavaScript editing paths from keyboard shortcuts and
+  website context-menu actions. Native focused-frame commands now preserve
+  selection, paste events, rich editing, undo and cross-origin frame ownership.
+- Edit accelerators require positive focus in the CEF subtree, not merely absence
+  of address/find focus. Flutter new-tab search, address/find, tab-search and
+  dialogs keep Flutter editing. Native Windows hooks no longer echo editing
+  chords/control characters into CEF; Linux/macOS reserve redo too, and macOS
+  reserves physical editing keys on non-Latin layouts.
+- Real Linux verification exposed a second issue: automatic CEF OSR kept copied
+  text inside CEF while GTK/Flutter still saw the previous desktop clipboard.
+  An explicit X11 CEF backend passed the same round-trip. CEF now selects X11
+  when DISPLAY is set and ozone-platform was not explicitly chosen. No GPU
+  blocklist/permission override or unavailable X11 is forced. Restart required;
+  Wayland-only and explicitly selected non-X11 backends remain unverified.
+- Exact known YouTube console notices now cover `/feed/history` and WebGPU probes
+  from the exact `/live_chat_replay` utility source beneath `/watch`. Tests retain
+  original evidence and exclude other routes, origins, error severities and
+  failures. ResizeObserver repeats, failed transfers after 200/204 headers,
+  googlevideo/timedtext errors, oEmbed 401 and offline errors remain diagnostics;
+  none are claimed repaired, silently retried or converted to success.
+
+Verification:
+- `flutter test`: **91 passed**, including full BrowserScreen focus/clipboard and
+  context-menu regression tests, plus history/chat positive and negative scope.
+- `flutter analyze`: **no issues**; `flutter build linux --release`: **passed**.
+- `/tmp/sirb-clipboard-venv/bin/python tool/verify_clipboard.py`: **passed** against
+  that rebuilt CEF 149 executable, isolated profile and local HTTP fixture,
+  opt-in loopback CDP **9268**, real XTest input and actual OS clipboard. Verified
+  exactly one paste into input/textarea/contenteditable, one undo/redo, focused
+  cross-origin iframe, Flutter new-tab search and address-bar navigation. The
+  tool requests GTK X11 for input automation, but supplies **no CEF Ozone switch**:
+  this run verifies the new default CEF launch policy. It checks copied fixture
+  text in the OS clipboard before submitting, never submits unknown clipboard
+  contents, and uses no user profile. It takes window focus and changes the
+  desktop clipboard to local fixture text. Evidence:
+  `build/clipboard-evidence/clipboard.json` and `sirb.log`.
+- `python3 -m py_compile tool/verify_clipboard.py` and `git diff --check`: passed.
+- Checked `lib/screens/`: desktop is still the sole screen target. Shared changes
+  and all three native key paths were updated; Windows/macOS builds/runtime,
+  pure Wayland clipboard and live YouTube/network rechecks are **not verified**.
+  Existing historical log rows and `dist/` installers are not regenerated.
+
+## Background tab idle/wake and refresh recovery
+
+Shared `BrowserController` lifecycle and the only screen target,
+`lib/screens/desktop`, cover Linux, Windows and macOS. No sleep setting, media
+consent, RAM/CPU budget, sandbox or native engine permission was relaxed.
+
+Reproduced regressions before the fix (all five initial lifecycle tests failed):
+- An older asynchronous activation could continue its loop and hide the tab
+  selected by a newer activation. Epoch checks after awaits and a snapshot of
+  the tab collection prevent stale visibility work and concurrent-list mutation.
+- Activation could return at CEF creation readiness while background theme,
+  visibility and navigation setup was still pending. Per-tab wake futures now
+  represent the entire initialization, not just creation.
+- Activation during native close could create a replacement too early; the old
+  sleep operation then overwrote its phase with sleeping. Retirement requests
+  are joined before recreation and no state is written after close. CEF close
+  itself remains asynchronous; controller identity rejects late callbacks.
+- Retired-host URL/crash callbacks could corrupt the replacement's state.
+  URL/title/load/console handlers now require the exact current controller.
+- A renderer termination was recorded but the dead controller was reused.
+  Selection/retry recreates it, preserving its URL and the genuine diagnostic.
+
+All refresh paths (toolbar, Retry, Ctrl/Cmd+R, shifted chord, F5 and page context
+menu) now use the shared recovery method. Healthy reloads retain their controller
+and navigation history; missing/terminated hosts are recreated, error UI is
+cleared, size/visibility are restored and fresh hosts load their saved URL once.
+A late bootstrap about:blank completion no longer completes the real page's
+loading state. Media snapshots have a two-second bound; unknown/stalled or
+playing state retains the host. Shutdown joins pending wake/retirement requests.
+There is no white-page heuristic, periodic forced reload or forced media start.
+
+The real termination probe found an additional native failure not covered by a
+mocked channel: replacement hung in retired-controller disposal. The common
+native close path held the paint-map mutex across CEF close/texture destruction,
+which can wait on another thread needing that mutex. It also retained browser-map
+iterators across CloseBrowser/OnBeforeClose callbacks. Close now detaches its
+texture under lock, releases the lock before native close/unregistration, and
+uses strong-reference snapshots before potentially reentrant close callbacks.
+The focused native termination/retry probe then passed, with a fresh CEF target
+and visibly rendered Flutter texture rather than merely an accepted Reload call.
+
+Automated verification:
+- `flutter test`: **101 passed**, including nine lifecycle tests in
+  `test/tab_lifecycle_test.dart` and full-screen Retry/Ctrl+R recovery in
+  `test/browser_editing_test.dart`, as well as existing focus/clipboard, media,
+  budget, diagnostics and Arabic/English layout regressions.
+- `flutter analyze`: **no issues**.
+- `cd third_party/webview_cef && flutter test`: **4 passed**.
+- `flutter build linux --release`: **passed**;
+  `build/linux/x64/release/bundle/sirb`.
+- `python3 -m py_compile tool/verify_tab_lifecycle.py`: **passed**.
+
+Native Linux x64 / CEF 149 evidence (isolated profiles, local fixtures, opt-in
+loopback CDP 9269 and real XTest input):
+- An initial **five-real-minute** idle probe passed host retirement, fresh-host
+  wake/navigation, a native Flutter-window pixel check and normal reload. The
+  before-idle/after-wake screenshots are **301.304 seconds** apart. Evidence:
+  `build/tab-lifecycle-five-minute-evidence/{before-idle,after-wake,after-reload}.png`.
+  Its later experimental Page.crash step was not confirmed, so that run is not
+  counted as a complete termination/retry pass. Other exploratory fixture runs
+  were rejected when they navigated the opener or changed the selected tab.
+- The actual termination test uses browser CDP process roles and `/proc` ancestry
+  to SIGKILL only renderers descended from the isolated Sirb, never the browser
+  process or user applications. The pre-native-fix probe hung in dispose; the
+  corrected native close path recreated and rendered the page successfully.
+- **Final clean release, full probe passed:**
+  `/tmp/sirb-clipboard-venv/bin/python tool/verify_tab_lifecycle.py --idle-minutes 1 --minimize-idle --output build/tab-lifecycle-release`.
+  The explicit one-minute threshold was observed after **59.556 seconds** from
+  the post-creation timer (lastUsed was set slightly earlier). Verified idle
+  host disappearance without a crash log, a different target on wake, actual
+  Flutter-window fixture pixels, Ctrl+R after wake, then toolbar refresh after
+  deliberately killing **two renderer children**. A fresh target and blue
+  fixture pixels returned, and Sirb itself was alive before intentional cleanup.
+  Evidence: `build/tab-lifecycle-release/lifecycle.json`, `sirb.log`,
+  `after-wake.png`, `after-reload.png`, `after-intentional-crash.png` and
+  `after-crash-retry.png`. This is not a claim of live-site/media endurance.
+- A separate final five-minute rerun was **not a pass**: the main window underwent
+  GTK teardown before the threshold and aborted with SIGABRT in
+  `g_mutex_clear`, with FlutterEngineRemoveView complaining about the implicit
+  view. Host coredump **1036853** confirms the GTK/Flutter destruction stack;
+  `build/tab-lifecycle-final/sirb.log` retains the messages. The initiating close
+  is not established and that teardown abort is **not claimed repaired** by the
+  idle-tab fix. It must not be misreported as successful tab retirement or
+  dismissed as an intentional test SIGTERM. The later minimized one-minute run
+  above completed all checks on the same clean executable.
+
+The probe defaults to five real minutes; `--crash-only` explicitly skips the idle
+checks (recorded as null), and `--minimize-idle` minimizes only its own window
+while waiting and restores it for input checks. It requires websocket-client,
+XTest and ImageMagick, and assumes the standard unscaled English desktop fixture
+layout for toolbar/tab input. It uses no user profile and closes only its own
+process group. Do not run it without warning about test-window/focus changes.
+
+Windows/macOS builds/runtime, Arm64 and Wayland-only presentation require matching
+hosts. No `dist/` installers were regenerated by this change.
+
+## YouTube context menus, comment editing and JSON ad-response coverage
+
+This follow-up preserves the existing uncommitted clipboard/lifecycle fixes above.
+The only targeted screen remains `lib/screens/desktop`; native menu handling and
+Dart/JavaScript policy are common to Linux, Windows and macOS.
+
+Changes:
+- Website menus now originate in `CefContextMenuHandler`, with Chromium's actual
+  link/selection/editability and view-relative coordinates. A document-start
+  **window** capture listener stops trusted events reaching site handlers but
+  does not cancel Chromium's default menu action. There is no second JS menu.
+  Closed shadow roots and cross-origin frames no longer rely on DOM `closest` or
+  frame-local event coordinates. Windowed game hosts retain their native menu.
+- Menu actions reject background tabs and replaced controllers. Secondary-button
+  movement no longer generates a left drag. Editing still uses exactly one native
+  focused-frame command, preserving paste handlers and rich editing/undo.
+- YouTube ad cleanup also covers successful same-origin exact player/next API
+  `Response.json()` and XHR JSON results, which bypass page `JSON.parse`. Known
+  player envelopes, including serialized `args.player_response`, are bounded to
+  three wrapper levels. Content metadata/streams, native parsing/abort errors,
+  request/response metadata, credentials and opt-out remain intact. No signed
+  media URLs, broad CDN blocks, fetch/XHR replacement or permission bypass added.
+
+Automated and native verification:
+- `flutter analyze`: **no issues**; `flutter test`: **102 passed**, including
+  rejection of a menu from a background tab and a paste after host replacement.
+- `cd third_party/webview_cef && flutter test`: **4 passed**.
+- Exported production policy + `python3 tool/verify_video_policy.py`: **passed**.
+  Tests actual fetch/XHR JSON on player/next, legacy serialized player envelopes,
+  initial response, preserved streaming data, unrelated/error endpoints, invalid
+  JSON/AbortError, shield off/on, bounded ad seek, media seek/play/pause and site
+  exceptions. These are hermetic Chromium fixtures, not universal live ad proof.
+- `GTK_THEME=Adwaita /tmp/sirb-update-venv/bin/python tool/verify_clipboard.py
+  --output build/context-clipboard-update`: **passed** on real release CEF 149,
+  isolated profile, explicit loopback CDP 9268 and real XTest input/OS clipboard.
+  All eleven checks passed: input/textarea/rich paste once, undo/redo, nested rich
+  context-menu paste and selection copy to the real OS clipboard, focused
+  cross-origin frame keyboard/context-menu paste,
+  actual iframe menu positioning, site window-handler/closed-shadow link menus,
+  background opening and Flutter new-tab/address editing. Native screenshot:
+  `build/context-clipboard-update/iframe-menu.png`.
+  Early fixture iterations counted the nested paste target incorrectly and
+  clicked outside right-aligned menus; those harness errors were corrected before
+  the passing run, not treated as application fixes.
+- Live **logged-out YouTube** in an isolated profile, opt-in loopback CDP 9273:
+  right-clicked a visible recommendation, opened a background tab, used real input
+  to navigate the source page via SPA, then repeated successfully on the next
+  page. Both source URLs stayed selected when their background links opened.
+  Initial page remained paused at zero, shields on, no observed anti-adblock
+  warning. Evidence: `build/youtube-menu-update/result.json`, `menu-{0,1}.png`,
+  `after.png`. A preliminary harness selected a non-hit-testable player overlay;
+  the final probe requires visible hit-tested recommendation anchors.
+- Final packaged engine: `tool/verify_browsing_smoke.py --page-count 0` with
+  `aqz-KE-bpKQ`, shields **on and off**, isolated profiles and opt-in loopback CDP
+  9274/9275: **both strict gates passed**. Manual start, increasing decoded frames
+  and position, and trusted pause verified. Evidence:
+  `build/youtube-playback-update-{on,off}/results.json` and `00.png`.
+  All test processes were stopped; no normal launch enables CDP.
+- `bash ./build_linux.sh`: **succeeded**, rebuilding Linux x86_64 release and
+  `.deb`, `.rpm`, `.pkg.tar.zst`, `.tar.gz`, `.AppImage` in `dist/`.
+  Build log: `/tmp/sirb-update-packages.log`. An initial relocated CMake cache
+  referenced `/home/hossam/StudioProjects/sirb`; moving only generated
+  `build/linux` aside allowed a clean successful native build. CEF fork/cache
+  sources were not deleted. Existing packaging ownership/symlink/AppStream
+  advisory warnings remain non-fatal.
+- `bash ./flatpak_linux.sh`: **blocked**, missing `flatpak-builder`; the existing
+  `dist/com.h.sirb-x86_64.flatpak` is old and **not this update**. No Windows,
+  macOS or Arm64 builds were fabricated.
+
+Limits: authenticated YouTube comment submission, logged-in ad delivery,
+YouTube live/Shorts transitions and Windows/macOS/Wayland-only clipboard still
+need matching account/host verification. Nested contenteditable paste is verified
+without signing in, not a claim of authenticated comment submission. A short
+logged-out sample cannot prove that every ad or anti-adblock warning is removed,
+nor Brave-equivalent protection. Existing H.264/AAC limitations are unchanged.
+Python compilation, `git diff --check` and the sole desktop target check passed.
+
