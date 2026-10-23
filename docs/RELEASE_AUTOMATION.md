@@ -6,7 +6,10 @@ Workflow: [Build desktop packages](../.github/workflows/build.yml).
 
 - Push to `main` or open a pull request (except Markdown-only changes): validate, build native packages, upload
   per-target Actions artifacts. Download them under **Actions → workflow run →
-  Artifacts**. Artifacts expire after **5 days**.
+  Artifacts**. Artifacts expire after **1 day** to limit multi-GB storage use;
+  download promptly. A complete build stores both native and merged artifact
+  copies, so check your repository's Actions storage/billing allowance. Published
+  release assets are separate and do not use this one-day retention.
 - **Actions → Build desktop packages → Run workflow** builds the selected ref.
   Leave `publish` **false** for a development/test build.
 - A complete successful run also produces `sirb-complete-<version>`, containing
@@ -132,7 +135,10 @@ Authenticode integration are not implemented by this change.
   transient transfer retry uses only a loopback fixture server).
 - CocoaPod/wrapper NDEBUG ABI flag checks: `ruby tool/test_cef_macos_config.rb`
   (Ruby required; no CocoaPods/macOS needed). This evaluates the podspec DSL with
-  a test harness; it is not a native link/runtime test.
+  a test harness and tests the targeted aggregate-framework quoting repair; it
+  is not a native link/runtime test. The post-install hook retains CEF's original
+  spaced framework name and all unrelated linker flags (never clear all flags
+  or rename the framework, which would break dyld/plugin dependencies).
 
 `tool/ci_linux_setup.sh` is explicitly for disposable GitHub runners. It enables
 user namespaces for Flatpak's builder where Ubuntu AppArmor's runner policy

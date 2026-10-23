@@ -20,10 +20,37 @@ module WebviewCEF
   PHASE_NAME = 'Embed CEF Helpers'.freeze
   SCRIPT = 'bash "${SRCROOT}/Flutter/ephemeral/.symlinks/plugins/webview_cef/macos/scripts/embed_cef_helpers.sh"'.freeze
 
+  # CocoaPods/Xcodeproj can split the vendored framework's spaced name while
+  # merging aggregate flags (CocoaPods #11493). Repair only that exact three-
+  # fragment signature, not all OTHER_LDFLAGS: other plugins need their flags.
+  # Keep CEF's real bundle/install name; renaming it breaks dyld at launch.
+  def self.repair_framework_link_flags(config)
+    flags = config.other_linker_flags
+    frameworks, simple = flags[:frameworks], flags[:simple]
+    fragments = simple.include?('Embedded') && simple.include?('Framework')
+    fragments ||= simple.include?('Embedded Framework')
+    return false unless frameworks.include?('Chromium') && fragments
+
+    frameworks.delete('Chromium')
+    frameworks << 'Chromium Embedded Framework'
+    simple.delete('Embedded')
+    simple.delete('Framework')
+    simple.delete('Embedded Framework')
+    true
+  end
+
   def self.install_helper_phase(installer)
     installer.aggregate_targets.each do |aggregate|
       project = aggregate.user_project
       next unless project
+
+      aggregate.xcconfigs.each do |configuration, config|
+        next unless repair_framework_link_flags(config)
+
+        path = aggregate.xcconfig_path(configuration)
+        config.save_as(path)
+        puts "webview_cef: repaired CEF framework quoting in '#{path}'."
+      end
 
       aggregate.user_targets.each do |target|
         # Only application targets get a bundle to embed helpers into.

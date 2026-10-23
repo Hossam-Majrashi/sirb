@@ -3,6 +3,8 @@
 require 'json'
 require 'open3'
 require 'rbconfig'
+require 'set'
+require_relative '../third_party/webview_cef/macos/embed_cef_helpers'
 
 podspec = File.expand_path('../third_party/webview_cef/macos/webview_cef.podspec', __dir__)
 # Model only the Pod::Spec DSL setters used by this path pod. Never execute its
@@ -36,4 +38,26 @@ RUBY
 end
 _, _, status = Open3.capture3({ 'CEF_WRAPPER_BUILD_TYPE' => 'Unknown', 'WEBVIEW_CEF_MACOS_ARCH' => 'universal' }, RbConfig.ruby, '-e', stub, podspec)
 raise 'Invalid wrapper configuration was accepted' if status.success?
-puts 'PASS: four CEF wrapper configurations match pod NDEBUG flags; unknown types rejected'
+# Exercise the structured Xcodeproj linker sets without CocoaPods/macOS. Keep
+# unrelated frameworks/libraries/-ObjC and inherited flags, and remain idempotent.
+flags = {
+  frameworks: Set['Chromium', 'FlutterMacOS', 'Metal'],
+  simple: Set['$(inherited)', '-ObjC', 'Embedded', 'Framework'],
+  libraries: Set['c++', 'cef_dll_wrapper'], weak_frameworks: Set['GameController'],
+  arg_files: Set['/tmp/list'], force_load: Set['/tmp/plugin.a']
+}
+config = Struct.new(:other_linker_flags).new(flags)
+expected = Marshal.load(Marshal.dump(flags))
+expected[:frameworks].delete('Chromium')
+expected[:frameworks] << 'Chromium Embedded Framework'
+expected[:simple].subtract(%w[Embedded Framework])
+raise 'Broken CEF flags not repaired' unless WebviewCEF.repair_framework_link_flags(config)
+raise 'Unrelated flags were changed' unless flags == expected
+raise 'Repair was not idempotent' if WebviewCEF.repair_framework_link_flags(config)
+grouped = { frameworks: Set['Chromium'], simple: Set['-ObjC', 'Embedded Framework'] }
+raise 'Grouped orphan fragment was not repaired' unless WebviewCEF.repair_framework_link_flags(Struct.new(:other_linker_flags).new(grouped))
+raise 'Grouped repair removed other flags' unless grouped == { frameworks: Set['Chromium Embedded Framework'], simple: Set['-ObjC'] }
+genuine = { frameworks: Set['Chromium'], simple: Set['-ObjC'] }
+raise 'Non-CEF Chromium framework was changed' if WebviewCEF.repair_framework_link_flags(Struct.new(:other_linker_flags).new(genuine))
+raise 'Non-CEF flags mutated' unless genuine == { frameworks: Set['Chromium'], simple: Set['-ObjC'] }
+puts 'PASS: four wrapper NDEBUG configurations, invalid-type rejection and targeted/idempotent CEF linker quoting'

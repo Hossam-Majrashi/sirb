@@ -1226,5 +1226,20 @@ fixture to CI (Ruby is not installed on the local host; native CI retest pending
 Draft creation uses the POST response directly, not draft-by-tag lookup. Platform
 packages now explicitly include Sirb/CEF/plugin licenses. Markdown-only branch/PR
 changes skip expensive rebuilds; version tags still always trigger release jobs.
-No Windows/macOS packaging success is claimed until the next actual native run.
+No Windows/macOS packaging success was claimed before the next actual native run.
+
+Run `39895818328` passed shared validation (including the Ruby podspec fixture),
+**both Linux jobs and both Windows jobs**. All 14 Linux artifacts and six genuine
+Windows MSI/setup EXE/portable ZIP packages were built and uploaded with native
+x64/ARM64 toolchains. This is build/package proof, not Windows runtime/SmartScreen
+verification. macOS CEF helpers and plugin linked after the ABI correction, but
+the Runner link exposed CocoaPods' known spaced-framework aggregate flag bug
+([CocoaPods #11493](https://github.com/CocoaPods/CocoaPods/issues/11493),
+[upstream #27](https://github.com/hlwhl/webview_cef/issues/27)): `Chromium` becomes
+one framework and `Embedded Framework` stray arguments. The existing post-install
+hook now repairs only that exact structured Xcodeproj signature and saves the
+aggregate xcconfig, preserving all other frameworks/libraries/-ObjC/inheritance.
+It never renames CEF's framework/install name or clears OTHER_LDFLAGS wholesale.
+The Ruby fixture also checks preservation, idempotence and non-CEF Chromium flags.
+Mac DMGs and complete merged checksums still require the next successful run.
 
